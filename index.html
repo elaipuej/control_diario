@@ -38,6 +38,23 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 .calc-title{font-size:9px;color:#657786;font-weight:bold;text-transform:uppercase}
 .calc-value{font-weight:bold;font-size:13px;margin-top:3px}
 @media(max-width:480px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}.dashboard-table{font-size:11px}.dashboard-table th,.dashboard-table td{padding:7px 4px}}
+
+.comparison-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
+.comparison-card{border:1px solid #e2e9ee;border-radius:12px;padding:12px;background:#fff}
+.comparison-title{font-size:14px;font-weight:bold;margin-bottom:4px}
+.comparison-note{font-size:11px;color:#657786;margin-bottom:8px}
+.comparison-table{width:100%;border-collapse:collapse;font-size:12px}
+.comparison-table th,.comparison-table td{padding:8px 6px;border-bottom:1px solid #edf1f4;text-align:right;vertical-align:middle}
+.comparison-table th:first-child,.comparison-table td:first-child{text-align:left}
+.comparison-table th{font-size:10px;text-transform:uppercase;color:#657786}
+.bar-wrap{height:7px;background:#e8eef3;border-radius:10px;overflow:hidden;min-width:70px}
+.bar{height:100%;background:#1976D2;border-radius:10px}
+@media(max-width:480px){.comparison-table{font-size:11px}.comparison-table th,.comparison-table td{padding:7px 4px}.bar-wrap{min-width:45px}}
+
+.date-range-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.range-summary{margin-top:8px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px}
+.range-select{margin-top:2px}
+@media(max-width:480px){.date-range-row{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -56,6 +73,18 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 <section class="card">
 <div class="section-title">Dashboard diario</div>
 <div class="muted">Resumen de los registros guardados para la fecha seleccionada. Puedes ver todos los trabajadores o filtrar por uno.</div>
+<label for="rangoDashboard">Periodo</label>
+<select id="rangoDashboard" class="range-select">
+  <option value="hoy">Hoy</option>
+  <option value="ayer">Ayer</option>
+  <option value="semana">Semana</option>
+  <option value="mes">Mes</option>
+</select>
+<div class="date-range-row">
+  <div><label for="desdeDashboard">Desde</label><input id="desdeDashboard" type="date"></div>
+  <div><label for="hastaDashboard">Hasta</label><input id="hastaDashboard" type="date"></div>
+</div>
+<div id="rangoResumen" class="range-summary">Periodo seleccionado: hoy</div>
 <label for="dashboardUsuario">Ver datos de</label>
 <select id="dashboardUsuario"><option value="">Todos los trabajadores</option></select>
 <div class="dashboard-grid">
@@ -69,6 +98,7 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
   <div class="metric"><div class="metric-label">Trabajadores</div><div class="metric-value" id="dashTrabajadores">0</div></div>
 </div>
 <button class="btn-secondary small-btn" onclick="actualizarDashboard()">Actualizar dashboard</button>
+<div id="dashboardComparativas" class="comparison-grid"></div>
 <div id="dashboardDetalle"></div>
 </section>
 <section class="card"><div class="section-title">Productos</div><div id="productos"></div></section>
@@ -102,6 +132,10 @@ let USUARIOS = [];
 const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
 const dashboardUsuarioInput = document.getElementById("dashboardUsuario");
+const rangoDashboardInput = document.getElementById("rangoDashboard");
+const desdeDashboardInput = document.getElementById("desdeDashboard");
+const hastaDashboardInput = document.getElementById("hastaDashboard");
+const rangoResumen = document.getElementById("rangoResumen");
 const productosContainer = document.getElementById("productos");
 
 function fechaLocalISO() {
@@ -112,7 +146,56 @@ function fechaLocalISO() {
   return `${y}-${m}-${day}`;
 }
 
+function parseFechaISO(iso) {
+  const [y,m,d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatearFecha(iso) {
+  return parseFechaISO(iso).toLocaleDateString("es-ES", {day:"2-digit", month:"2-digit", year:"numeric"});
+}
+
+function fechaISODesdeDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function obtenerRangoDashboard() {
+  const hoy = parseFechaISO(fechaLocalISO());
+  const opcion = rangoDashboardInput.value;
+  let desde = new Date(hoy);
+  let hasta = new Date(hoy);
+
+  if (opcion === "ayer") {
+    desde.setDate(hoy.getDate() - 1);
+    hasta = new Date(desde);
+  } else if (opcion === "semana") {
+    const dia = hoy.getDay() || 7;
+    desde.setDate(hoy.getDate() - (dia - 1));
+  } else if (opcion === "mes") {
+    desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  }
+
+  return {
+    desde: fechaISODesdeDate(desde),
+    hasta: fechaISODesdeDate(hasta)
+  };
+}
+
+function actualizarControlesRango() {
+  const rango = obtenerRangoDashboard();
+  desdeDashboardInput.value = rango.desde;
+  hastaDashboardInput.value = rango.hasta;
+
+  const labels = {hoy:"Hoy", ayer:"Ayer", semana:"Semana", mes:"Mes"};
+  rangoResumen.textContent = `Periodo: ${labels[rangoDashboardInput.value] || rangoDashboardInput.value} · ${formatearFecha(rango.desde)} → ${formatearFecha(rango.hasta)}`;
+}
+
 fechaInput.value = fechaLocalISO();
+rangoDashboardInput.value = "hoy";
+actualizarControlesRango();
 
 async function supabaseGet(path) {
   const r = await fetch(API + path, { headers });
@@ -261,6 +344,25 @@ fechaInput.addEventListener("change", async () => {
 });
 usuarioInput.addEventListener("change", cargarControlExistente);
 dashboardUsuarioInput.addEventListener("change", actualizarDashboard);
+rangoDashboardInput.addEventListener("change", async () => {
+  actualizarControlesRango();
+  await actualizarDashboard();
+});
+desdeDashboardInput.addEventListener("change", async () => {
+  rangoDashboardInput.value = "hoy";
+  if (desdeDashboardInput.value === hastaDashboardInput.value && desdeDashboardInput.value === fechaLocalISO()) {
+    rangoDashboardInput.value = "hoy";
+  } else {
+    rangoDashboardInput.value = "custom";
+  }
+  rangoResumen.textContent = `Periodo personalizado: ${formatearFecha(desdeDashboardInput.value)} → ${formatearFecha(hastaDashboardInput.value)}`;
+  await actualizarDashboard();
+});
+hastaDashboardInput.addEventListener("change", async () => {
+  rangoDashboardInput.value = "custom";
+  rangoResumen.textContent = `Periodo personalizado: ${formatearFecha(desdeDashboardInput.value)} → ${formatearFecha(hastaDashboardInput.value)}`;
+  await actualizarDashboard();
+});
 
 function obtenerRegistros() {
   const fecha = fechaInput.value;
@@ -474,47 +576,178 @@ async function actualizarDashboard() {
 
   try {
     const dashboardUsuario = dashboardUsuarioInput.value;
-    let ruta = "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=eq." + encodeURIComponent(fecha);
+    let desde = desdeDashboardInput.value;
+    let hasta = hastaDashboardInput.value;
+
+    if (!desde || !hasta) {
+      const rango = obtenerRangoDashboard();
+      desde = rango.desde;
+      hasta = rango.hasta;
+      desdeDashboardInput.value = desde;
+      hastaDashboardInput.value = hasta;
+    }
+
+    if (desde > hasta) {
+      throw new Error("La fecha desde no puede ser posterior a la fecha hasta.");
+    }
+
+    const fecha = fechaInput.value;
+    let ruta = "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=gte." + encodeURIComponent(desde) + "&fecha=lte." + encodeURIComponent(hasta);
     if (dashboardUsuario) {
       ruta += "&usuario_id=eq." + encodeURIComponent(dashboardUsuario);
     }
     const registros = await supabaseGet(ruta);
 
+    const nombreUsuarios = Object.fromEntries(USUARIOS.map(u => [String(u.id), u.nombre]));
+    const nombreProductos = Object.fromEntries(PRODUCTOS.map(p => [String(p.id), p.nombre]));
+
+    const calcularFila = r => {
+      const inicial = Number(r.inicial) || 0;
+      const reposicion = Number(r.reposicion) || 0;
+      const sobrante = Number(r.sobrante) || 0;
+      const merma = Number(r.merma) || 0;
+      const base = inicial + reposicion;
+      return {
+        inicial,
+        reposicion,
+        sobrante,
+        merma,
+        consumo: base - sobrante,
+        base,
+        mermaPct: base > 0 ? (merma / base) * 100 : 0
+      };
+    };
+
     const totales = registros.reduce((acc, r) => {
-      acc.inicial += Number(r.inicial) || 0;
-      acc.reposicion += Number(r.reposicion) || 0;
-      acc.sobrante += Number(r.sobrante) || 0;
-      acc.merma += Number(r.merma) || 0;
+      const x = calcularFila(r);
+      acc.inicial += x.inicial;
+      acc.reposicion += x.reposicion;
+      acc.sobrante += x.sobrante;
+      acc.merma += x.merma;
+      acc.consumo += x.consumo;
+      acc.base += x.base;
       return acc;
-    }, {inicial:0,reposicion:0,sobrante:0,merma:0});
+    }, {inicial:0,reposicion:0,sobrante:0,merma:0,consumo:0,base:0});
 
-    totales.consumo = totales.inicial + totales.reposicion - totales.sobrante;
-    const base = totales.inicial + totales.reposicion;
-    totales.mermaPct = base > 0 ? (totales.merma / base) * 100 : 0;
-
-    const trabajadores = new Set(registros.map(r => r.usuario_id)).size;
+    const mermaPct = totales.base > 0 ? (totales.merma / totales.base) * 100 : 0;
+    const trabajadores = new Set(registros.map(r => String(r.usuario_id))).size;
 
     document.getElementById('dashProductos').textContent = registros.length;
-    document.getElementById('dashControles').textContent = trabajadores + (trabajadores === 1 ? ' control' : ' controles');
+    document.getElementById('dashControles').textContent = trabajadores + (trabajadores === 1 ? ' trabajador' : ' trabajadores');
     document.getElementById('dashInicial').textContent = totales.inicial;
     document.getElementById('dashReposicion').textContent = totales.reposicion;
     document.getElementById('dashSobrante').textContent = totales.sobrante;
     document.getElementById('dashConsumo').textContent = totales.consumo;
     document.getElementById('dashMerma').textContent = totales.merma;
-    document.getElementById('dashMermaPct').textContent = totales.mermaPct.toFixed(2).replace('.', ',') + '%';
+    document.getElementById('dashMermaPct').textContent = mermaPct.toFixed(2).replace('.', ',') + '%';
     document.getElementById('dashTrabajadores').textContent = trabajadores;
 
-    const productos = Object.fromEntries(PRODUCTOS.map(p => [p.id, p.nombre]));
+    // Comparativa por trabajador.
+    const porTrabajador = {};
+    registros.forEach(r => {
+      const id = String(r.usuario_id);
+      if (!porTrabajador[id]) {
+        porTrabajador[id] = {
+          nombre: nombreUsuarios[id] || 'Usuario',
+          productos: 0,
+          consumo: 0,
+          merma: 0,
+          base: 0,
+          reposicion: 0,
+          sobrante: 0
+        };
+      }
+      const x = calcularFila(r);
+      const t = porTrabajador[id];
+      t.productos += 1;
+      t.consumo += x.consumo;
+      t.merma += x.merma;
+      t.base += x.base;
+      t.reposicion += x.reposicion;
+      t.sobrante += x.sobrante;
+    });
+
+    const trabajadoresRows = Object.values(porTrabajador)
+      .sort((a,b) => b.merma - a.merma || b.consumo - a.consumo)
+      .map(t => {
+        const pct = t.base > 0 ? (t.merma / t.base) * 100 : 0;
+        const bar = mermaPct > 0 ? Math.min(100, (pct / mermaPct) * 100) : 0;
+        return `<tr>
+          <td><strong>${escapeHtml(t.nombre)}</strong></td>
+          <td>${t.productos}</td>
+          <td>${t.consumo}</td>
+          <td>${t.merma}</td>
+          <td>${pct.toFixed(2).replace('.', ',')}%</td>
+          <td><div class="bar-wrap"><div class="bar" style="width:${bar}%"></div></div></td>
+        </tr>`;
+      }).join('');
+
+    // Comparativa por producto: suma de todos los trabajadores para cada producto.
+    const porProducto = {};
+    registros.forEach(r => {
+      const id = String(r.producto_id);
+      if (!porProducto[id]) {
+        porProducto[id] = {
+          nombre: nombreProductos[id] || 'Producto',
+          registros: 0,
+          consumo: 0,
+          merma: 0,
+          base: 0
+        };
+      }
+      const x = calcularFila(r);
+      const p = porProducto[id];
+      p.registros += 1;
+      p.consumo += x.consumo;
+      p.merma += x.merma;
+      p.base += x.base;
+    });
+
+    const maxMerma = Math.max(0, ...Object.values(porProducto).map(p => p.merma));
+    const productoRows = Object.values(porProducto)
+      .sort((a,b) => b.merma - a.merma || b.consumo - a.consumo)
+      .map(p => {
+        const pct = p.base > 0 ? (p.merma / p.base) * 100 : 0;
+        const bar = maxMerma > 0 ? (p.merma / maxMerma) * 100 : 0;
+        return `<tr>
+          <td><strong>${escapeHtml(p.nombre)}</strong></td>
+          <td>${p.registros}</td>
+          <td>${p.consumo}</td>
+          <td>${p.merma}</td>
+          <td>${pct.toFixed(2).replace('.', ',')}%</td>
+          <td><div class="bar-wrap"><div class="bar" style="width:${bar}%"></div></div></td>
+        </tr>`;
+      }).join('');
+
+    document.getElementById('dashboardComparativas').innerHTML = registros.length ? `
+      <div class="comparison-card">
+        <div class="comparison-title">Comparativa por trabajador</div>
+        <div class="comparison-note">Consumo y merma acumulados del ${escapeHtml(formatearFecha(desde))} al ${escapeHtml(formatearFecha(hasta))}.</div>
+        <table class="comparison-table">
+          <thead><tr><th>Trabajador</th><th>Prod.</th><th>Consumo</th><th>Merma</th><th>% Merma</th><th></th></tr></thead>
+          <tbody>${trabajadoresRows}</tbody>
+        </table>
+      </div>
+      <div class="comparison-card">
+        <div class="comparison-title">Comparativa por producto</div>
+        <div class="comparison-note">Periodo ${escapeHtml(formatearFecha(desde))} → ${escapeHtml(formatearFecha(hasta))}. Ordenada de mayor a menor merma acumulada.</div>
+        <table class="comparison-table">
+          <thead><tr><th>Producto</th><th>Reg.</th><th>Consumo</th><th>Merma</th><th>% Merma</th><th></th></tr></thead>
+          <tbody>${productoRows}</tbody>
+        </table>
+      </div>` : `
+      <div class="comparison-card">
+        <div class="muted">No hay datos para comparar en esta fecha.</div>
+      </div>`;
+
     const detalle = {};
     registros.forEach(r => {
       const id = String(r.producto_id);
-      if (!detalle[id]) detalle[id] = {producto:productos[r.producto_id] || 'Producto', consumo:0, merma:0, base:0};
-      const inicial = Number(r.inicial) || 0;
-      const reposicion = Number(r.reposicion) || 0;
-      const sobrante = Number(r.sobrante) || 0;
-      detalle[id].consumo += inicial + reposicion - sobrante;
-      detalle[id].merma += Number(r.merma) || 0;
-      detalle[id].base += inicial + reposicion;
+      if (!detalle[id]) detalle[id] = {producto:nombreProductos[id] || 'Producto', consumo:0, merma:0, base:0};
+      const x = calcularFila(r);
+      detalle[id].consumo += x.consumo;
+      detalle[id].merma += x.merma;
+      detalle[id].base += x.base;
     });
 
     const filas = Object.values(detalle)
@@ -525,10 +758,14 @@ async function actualizarDashboard() {
       }).join('');
 
     document.getElementById('dashboardDetalle').innerHTML = registros.length ?
-      `<table class="dashboard-table"><thead><tr><th>Producto</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody>${filas}</tbody></table>` :
+      `<div class="comparison-card" style="margin-top:12px">
+        <div class="comparison-title">Detalle por producto</div>
+        <table class="dashboard-table"><thead><tr><th>Producto</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody>${filas}</tbody></table>
+      </div>` :
       '<div class="muted" style="margin-top:12px">No hay registros guardados para esta fecha.</div>';
   } catch (error) {
     console.error(error);
+    document.getElementById('dashboardComparativas').innerHTML = '<div class="comparison-card"><div class="muted">No se pudieron cargar las comparativas.</div></div>';
     document.getElementById('dashboardDetalle').innerHTML = '<div class="muted" style="margin-top:12px">No se pudo cargar el dashboard.</div>';
   }
 }
