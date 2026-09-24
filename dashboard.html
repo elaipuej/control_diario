@@ -1,1 +1,103 @@
 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#173F5F">
+<title>Dashboard · Control Diario</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f6f9;color:#173F5F}
+header{background:#173F5F;color:#fff;padding:18px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header-inner{max-width:1100px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{margin:0;font-size:23px}.subtitle{margin-top:4px;opacity:.82;font-size:13px}
+.back{display:inline-block;text-decoration:none;color:#fff;border:1px solid rgba(255,255,255,.35);padding:9px 12px;border-radius:10px;font-weight:bold;font-size:12px}
+main{max-width:1100px;margin:auto;padding:14px}.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+label{display:block;font-size:12px;font-weight:bold;margin:10px 0 5px} select,input,button{width:100%;font:inherit;border-radius:10px}
+select,input{border:1px solid #ccd7e0;padding:11px;background:#fff} button{border:0;padding:12px;cursor:pointer;font-weight:bold}
+.btn-secondary{background:#e9eef3;color:#173F5F}.small-btn{width:auto;padding:9px 12px;font-size:12px}
+.controls{display:grid;grid-template-columns:180px 1fr 1fr 1fr;gap:10px;align-items:end}.date-range-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.range-summary{margin-top:8px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px}
+.metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-top:12px}.metric{background:#f7fafc;border:1px solid #e5edf3;border-radius:12px;padding:11px}.metric-label{font-size:10px;font-weight:bold;color:#657786;text-transform:uppercase}.metric-value{font-size:22px;font-weight:bold;margin-top:4px}.metric-sub{font-size:11px;color:#657786;margin-top:2px}
+.section-title{font-size:15px;font-weight:bold;margin-bottom:7px}.note{font-size:12px;color:#657786;line-height:1.4}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.chart-card{border:1px solid #e2e9ee;border-radius:12px;padding:12px}.chart-title{font-size:14px;font-weight:bold}.chart-note{font-size:11px;color:#657786;margin:4px 0 10px}.chart-wrap{display:flex;flex-direction:column;gap:9px}.chart-row{display:grid;grid-template-columns:minmax(145px,1.6fr) minmax(90px,3fr) 60px;gap:8px;align-items:center}.chart-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chart-track{height:20px;background:#edf2f6;border-radius:7px;overflow:hidden}.chart-fill{height:100%;background:#1976D2;border-radius:7px;min-width:2px}.chart-value{text-align:right;font-size:12px;font-weight:bold}.chart-empty{padding:14px;border:1px dashed #d7e1e8;border-radius:10px;color:#657786;font-size:12px}
+.table-wrap{overflow:auto}.data-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}.data-table th,.data-table td{padding:8px 6px;border-bottom:1px solid #edf1f4;text-align:right;vertical-align:middle}.data-table th:first-child,.data-table td:first-child{text-align:left}.data-table th{font-size:10px;text-transform:uppercase;color:#657786}.data-table .name-cell{min-width:220px}.history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:12px}.footer-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+@media(max-width:900px){.metric-grid{grid-template-columns:repeat(3,1fr)}.controls{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}}
+@media(max-width:560px){main{padding:10px}.card{padding:13px}.metric-grid{grid-template-columns:repeat(2,1fr)}.controls{grid-template-columns:1fr}.date-range-row{grid-template-columns:1fr 1fr}.chart-row{grid-template-columns:minmax(110px,1.5fr) minmax(70px,2fr) 50px}.footer-tools{grid-template-columns:1fr}.back{padding:8px 9px;font-size:11px}}
+</style>
+</head>
+<body>
+<header><div class="header-inner"><div><h1>Dashboard · Control Diario</h1><div class="subtitle">Consumo, productos más y menos vendidos, merma y stock</div></div><a class="back" href="index.html">← Volver al control</a></div></header>
+<main>
+<section class="card">
+  <div class="section-title">Filtros</div>
+  <div class="controls">
+    <div><label for="rango">Periodo</label><select id="rango"><option value="hoy">Hoy</option><option value="ayer">Ayer</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="custom">Personalizado</option></select></div>
+    <div><label for="dashboardUsuario">Trabajador</label><select id="dashboardUsuario"><option value="">Todos los trabajadores</option></select></div>
+    <div><label for="desde">Desde</label><input id="desde" type="date"></div>
+    <div><label for="hasta">Hasta</label><input id="hasta" type="date"></div>
+  </div>
+  <div id="rangoResumen" class="range-summary"></div>
+  <button class="btn-secondary small-btn" onclick="cargarDashboard()">Actualizar dashboard</button>
+</section>
+
+<section class="card">
+  <div class="section-title">Resumen</div>
+  <div class="note">“Consumo” = Inicial + Reposición − Sobrante. Sirve como aproximación a unidades vendidas mientras no tengamos datos de caja/POS.</div>
+  <div class="metric-grid">
+    <div class="metric"><div class="metric-label">Unidades consumidas</div><div class="metric-value" id="mConsumo">0</div></div>
+    <div class="metric"><div class="metric-label">% Merma</div><div class="metric-value" id="mMermaPct">0,00%</div><div class="metric-sub" id="mMermaUnits">0 unidades</div></div>
+    <div class="metric"><div class="metric-label">Registros</div><div class="metric-value" id="mRegistros">0</div></div>
+    <div class="metric"><div class="metric-label">Trabajadores</div><div class="metric-value" id="mTrabajadores">0</div></div>
+    <div class="metric"><div class="metric-label">Días con datos</div><div class="metric-value" id="mDias">0</div></div>
+    <div class="metric"><div class="metric-label">Inicial</div><div class="metric-value" id="mInicial">0</div></div>
+    <div class="metric"><div class="metric-label">Reposición</div><div class="metric-value" id="mReposicion">0</div></div>
+    <div class="metric"><div class="metric-label">Sobrante</div><div class="metric-value" id="mSobrante">0</div></div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="section-title">Productos más y menos vendidos</div>
+  <div class="chart-grid">
+    <div class="chart-card"><div class="chart-title">Top 10 por consumo</div><div class="chart-note">Mayor salida de producto en el periodo seleccionado.</div><div id="top10" class="chart-wrap"></div></div>
+    <div class="chart-card"><div class="chart-title">10 con menor consumo</div><div class="chart-note">Incluye productos con 0 consumo dentro del catálogo activo.</div><div id="bottom10" class="chart-wrap"></div></div>
+  </div>
+</section>
+
+<section class="card"><div class="section-title">Comparativa por trabajador</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Trabajador</th><th>Reg.</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody id="workerRows"></tbody></table></div></section>
+
+<section class="card"><div class="section-title">Comparativa por producto</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody id="productRows"></tbody></table></div></section>
+
+<section class="card"><div class="section-title">Historial reciente</div><div id="historial"><div class="note">Cargando…</div></div><div class="footer-tools"><button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button><a class="btn-secondary" href="index.html" style="display:block;text-align:center;text-decoration:none;padding:12px;border-radius:10px">Ir al control diario</a></div></section>
+</main>
+<script>
+const SUPABASE_URL="https://dsgjwaovruukvlezcdnp.supabase.co";
+const SUPABASE_KEY="sb_publishable_6hvO0W5rYKVpSgGuWBXnTA_J8CtzfqS";
+const API=SUPABASE_URL+"/rest/v1";
+const headers={"apikey":SUPABASE_KEY,"Content-Type":"application/json"};
+let PRODUCTOS=[],USUARIOS=[];
+const $=id=>document.getElementById(id);
+function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function parseISO(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function iso(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function fmtDate(s){return parseISO(s).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function num(v){return Number(v)||0}
+function esc(s){return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
+async function get(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||`HTTP ${r.status}`);return r.json()}
+function rangoPeriodo(){const h=parseISO(fechaLocalISO()),op=$('rango').value;let d=new Date(h),u=new Date(h);if(op==='ayer'){d.setDate(d.getDate()-1);u=new Date(d)}else if(op==='semana'){const dow=h.getDay()||7;d.setDate(h.getDate()-(dow-1))}else if(op==='mes'){d=new Date(h.getFullYear(),h.getMonth(),1)}else if(op==='custom'){d=parseISO($('desde').value||fechaLocalISO());u=parseISO($('hasta').value||$('desde').value||fechaLocalISO())}return {desde:iso(d),hasta:iso(u)}}
+function actualizarRangoUI(){const r=rangoPeriodo();$('desde').value=r.desde;$('hasta').value=r.hasta;$('rangoResumen').textContent=`Periodo: ${fmtDate(r.desde)} → ${fmtDate(r.hasta)}`}
+function setupRange(){$('rango').addEventListener('change',()=>{actualizarRangoUI();cargarDashboard()});$('desde').addEventListener('change',()=>{$('rango').value='custom';actualizarRangoUI();cargarDashboard()});$('hasta').addEventListener('change',()=>{$('rango').value='custom';actualizarRangoUI();cargarDashboard()})}
+function filaCalculo(r){const inicial=num(r.inicial),reposicion=num(r.reposicion),sobrante=num(r.sobrante),merma=num(r.merma),base=inicial+reposicion;return {inicial,reposicion,sobrante,merma,base,consumo:base-sobrante,pct:base?merma/base*100:0}}
+function chartHtml(items){if(!items.length)return '<div class="chart-empty">Sin datos en este periodo.</div>';const max=Math.max(...items.map(x=>x.value),1);return items.map((x,i)=>{const w=Math.max(2,Math.round(x.value/max*100));return `<div class="chart-row"><div class="chart-label" title="${esc(x.name)}"><strong>${i+1}. ${esc(x.name)}</strong></div><div class="chart-track"><div class="chart-fill" style="width:${w}%"></div></div><div class="chart-value">${x.value}</div></div>`}).join('')}
+function renderCharts(bp){const all=Object.values(bp).map(x=>({name:x.p.nombre,value:x.consumo}));const top=all.filter(x=>x.value>0).sort((a,b)=>b.value-a.value).slice(0,10);const bottom=[...all].sort((a,b)=>a.value-b.value).slice(0,10);$('top10').innerHTML=chartHtml(top);$('bottom10').innerHTML=chartHtml(bottom)}
+function renderWorkers(bw){const rows=Object.values(bw).sort((a,b)=>b.consumo-a.consumo).map(x=>{const pct=x.base?x.merma/x.base*100:0;return `<tr><td><strong>${esc(x.nombre)}</strong></td><td>${x.reg}</td><td>${x.consumo}</td><td>${x.merma}</td><td>${pct.toFixed(2).replace('.',',')}%</td></tr>`}).join('');$('workerRows').innerHTML=rows||'<tr><td colspan="5" class="note">Sin datos.</td></tr>'}
+function renderProducts(bp){const rows=Object.values(bp).sort((a,b)=>b.consumo-a.consumo).map(x=>{const pct=x.base?x.merma/x.base*100:0;return `<tr><td class="name-cell"><strong>${esc(x.p.nombre)}</strong></td><td>${x.consumo}</td><td>${x.merma}</td><td>${pct.toFixed(2).replace('.',',')}%</td></tr>`}).join('');$('productRows').innerHTML=rows||'<tr><td colspan="4" class="note">Sin datos.</td></tr>'}
+async function cargarDashboard(){const {desde,hasta}=rangoPeriodo();if(desde>hasta){$('rangoResumen').textContent='El rango de fechas no es válido.';return}try{const uid=$('dashboardUsuario').value;let path=`/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${encodeURIComponent(desde)}&fecha=lte.${encodeURIComponent(hasta)}`;if(uid)path+=`&usuario_id=eq.${encodeURIComponent(uid)}`;const registros=await get(path);const users=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));const total={inicial:0,consumo:0,merma:0,base:0,reposicion:0,sobrante:0};const dias=new Set(),byProduct={},byWorker={};registros.forEach(r=>{const x=filaCalculo(r);Object.keys(total).forEach(k=>total[k]+=x[k]||0);dias.add(r.fecha);const p=prods[String(r.producto_id)]||{nombre:'Producto'};const pid=String(r.producto_id);if(!byProduct[pid])byProduct[pid]={p,reg:0,consumo:0,merma:0,base:0};const bp=byProduct[pid];bp.reg++;bp.consumo+=x.consumo;bp.merma+=x.merma;bp.base+=x.base;const wid=String(r.usuario_id);if(!byWorker[wid])byWorker[wid]={nombre:users[wid]||'Usuario',reg:0,consumo:0,merma:0,base:0};const bw=byWorker[wid];bw.reg++;bw.consumo+=x.consumo;bw.merma+=x.merma;bw.base+=x.base});const pct=total.base?total.merma/total.base*100:0;$('mConsumo').textContent=total.consumo;$('mMermaPct').textContent=pct.toFixed(2).replace('.',',')+'%';$('mMermaUnits').textContent=total.merma+' unidades';$('mRegistros').textContent=registros.length;$('mTrabajadores').textContent=new Set(registros.map(r=>String(r.usuario_id))).size;$('mDias').textContent=dias.size;$('mInicial').textContent=total.inicial;$('mReposicion').textContent=total.reposicion;$('mSobrante').textContent=total.sobrante;renderCharts(byProduct);renderWorkers(byWorker);renderProducts(byProduct);$('rangoResumen').textContent=`Periodo: ${fmtDate(desde)} → ${fmtDate(hasta)} · ${registros.length} registros`}catch(e){console.error(e);$('rangoResumen').textContent='No se pudo cargar el dashboard: '+e.message}}
+async function cargarHistorial(){try{const rows=await get('/registros?select=fecha,usuario_id&order=creado_en.desc&limit=150');const users=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const g={};rows.forEach(r=>{const k=`${r.fecha} · ${users[String(r.usuario_id)]||'Usuario'}`;g[k]=(g[k]||0)+1});const ks=Object.keys(g).slice(0,12);$('historial').innerHTML=ks.length?ks.map(k=>`<div class="history-row"><strong>${esc(k)}</strong><br><span class="note">${g[k]} productos registrados</span></div>`).join(''):'<div class="note">No hay registros.</div>'}catch(e){$('historial').innerHTML='<div class="note">No se pudo cargar el historial.</div>'}}
+async function exportarCSV(){try{const rows=await get('/registros?select=fecha,hora,usuario_id,producto_id,inicial,reposicion,sobrante,merma,observaciones&order=fecha.asc,hora.asc');if(!rows.length){alert('No hay registros para exportar.');return}const us=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const ps=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));const cols=['fecha','hora','usuario','producto','inicial','reposicion','sobrante','merma','consumo','merma_porcentaje','observaciones'];const data=rows.map(r=>{const x=filaCalculo(r);return [r.fecha,r.hora||'',us[String(r.usuario_id)]||'',ps[String(r.producto_id)]?.nombre||'',r.inicial,r.reposicion,r.sobrante,r.merma,x.consumo,(x.pct/100).toFixed(4),r.observaciones||'']});const csv=[cols.join(';'),...data.map(row=>row.map(v=>String(v??'').replaceAll(';',',').replaceAll('\n',' ')).join(';'))].join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='control_diario.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){alert('No se ha podido exportar: '+e.message)}}
+async function init(){try{PRODUCTOS=await get('/productos?activo=eq.true&order=orden.asc');USUARIOS=await get('/usuarios?activo=eq.true&order=nombre.asc');$('dashboardUsuario').innerHTML='<option value="">Todos los trabajadores</option>'+USUARIOS.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join('');actualizarRangoUI();setupRange();$('dashboardUsuario').addEventListener('change',cargarDashboard);await cargarDashboard();await cargarHistorial()}catch(e){console.error(e);alert('No se pudo cargar el dashboard: '+e.message)}}
+init();
+</script>
+</body>
+</html>
