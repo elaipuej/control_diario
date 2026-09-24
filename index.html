@@ -1,16 +1,76 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Diario</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#173F5F">
+<title>Control Diario</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f6f9;color:#173F5F}
+header{background:#173F5F;color:#fff;padding:18px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.header-inner{max-width:760px;margin:auto}h1{margin:0;font-size:23px}.subtitle{margin-top:4px;opacity:.8;font-size:13px}
+main{max-width:760px;margin:auto;padding:14px}.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+label{display:block;font-size:12px;font-weight:bold;margin:10px 0 5px}
+select,input,button{width:100%;font:inherit;border-radius:10px}
+select,input{border:1px solid #ccd7e0;padding:11px;background:#fff}input[type=number]{text-align:center}
+button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{background:#1976D2;color:#fff}.btn-secondary{background:#e9eef3;color:#173F5F;margin-top:8px}
+.progress-wrap{height:9px;background:#e5edf3;border-radius:20px;overflow:hidden;margin-top:10px}.progress{height:100%;width:0;background:#2EAD68;transition:width .2s}
+.progress-info{display:flex;justify-content:space-between;font-size:12px;margin-top:7px;color:#657786}
+.section-title{font-size:15px;font-weight:bold;margin-bottom:8px}.product{border:1px solid #e2e9ee;border-radius:12px;padding:13px;margin-bottom:10px}
+.product-name{font-weight:bold;font-size:14px;margin-bottom:10px}.fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}.fields input{padding:9px 5px}
+.message{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}.success{background:#e8f7ef;color:#19724a}.warning{background:#fff4df;color:#8a5a00}
+.history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:13px}.muted{color:#657786;font-size:12px}
+@media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
+</style>
 </head>
-
 <body>
-
-    <h1>Control Diario</h1>
-
-    <p>Mi aplicación de control diario</p>
-
+<header><div class="header-inner"><h1>Control Diario</h1><div class="subtitle">Registro diario de productos</div></div></header>
+<main>
+<section class="card">
+<label for="fecha">Fecha</label><input id="fecha" type="date">
+<label for="usuario">Usuario</label>
+<select id="usuario"><option value="">Seleccionar usuario...</option><option>Ana</option><option>Luis</option><option>María</option><option>Juan</option><option>Pedro</option></select>
+</section>
+<section class="card">
+<div class="section-title">Progreso del control</div>
+<div class="progress-wrap"><div id="progress" class="progress"></div></div>
+<div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
+</section>
+<section class="card"><div class="section-title">Productos</div><div id="productos"></div></section>
+<section class="card">
+<button class="btn-primary" onclick="guardarControl()">GUARDAR CONTROL</button>
+<button class="btn-secondary" onclick="limpiarFormulario()">Limpiar formulario</button>
+<div id="mensaje" class="message"></div>
+</section>
+<section class="card">
+<div class="section-title">Últimos controles guardados en este dispositivo</div>
+<div id="historial"><div class="muted">No hay controles guardados todavía.</div></div>
+<button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button>
+</section>
+</main>
+<script>
+const PRODUCTOS=["Bocadillo California York", "Bocadillo Italiano de pavo", "Bocadillo vegetal", "Bocadillo de jamón", "Wrap nórdico", "Bocadillo César", "Santoña con bonito", "Pollo al curry", "Playero de ensaladilla", "Las Landas", "Sándwich huevo y bacon", "Paté de verduras", "Bocadillo de tortilla de patatas", "Burrito de cochinita pibil", "Bocadillo de pollo", "Bocadillo Cubano", "Mollete piripi", "Focaccia Lower East", "Combo Fuji", "Combo Tokio", "Combo California Teriyaki Pollo", "Poke Hawaiano de Pavo", "Poke Maui de salmón", "Arroz chaufa con ternera", "Noodles Pad Thai con pollo", "Tortilla de patata", "Salmorejo cordobés", "Crema del día (Olivo)", "Green detox de manzana", "Antioxidante zanahoria", "Smoothie proteico de plátano", "Smoothie de mango", "Smoothie proteico de frutos rojos", "Hummus", "Ensaladilla tradicional", "Naranja", "Bocadillo SIN GLUTEN 1", "Bocadillo SIN GLUTEN 2"];
+const fechaInput=document.getElementById("fecha"),usuarioInput=document.getElementById("usuario"),productosContainer=document.getElementById("productos");
+fechaInput.value=new Date().toISOString().slice(0,10);
+function crearProductos(){PRODUCTOS.forEach((producto,indice)=>{const bloque=document.createElement("div");bloque.className="product";bloque.innerHTML=`
+<div class="product-name">${indice+1}. ${escapeHtml(producto)}</div>
+<div class="fields">
+<div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="inicial" inputmode="numeric"></div>
+<div><div class="field-title">REPOSICIÓN</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="reposicion" inputmode="numeric"></div>
+<div><div class="field-title">SOBRANTE</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="sobrante" inputmode="numeric"></div>
+<div><div class="field-title">MERMA</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="merma" inputmode="numeric"></div>
+</div>`;productosContainer.appendChild(bloque)})}
+function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+function actualizarProgreso(){let completados=0;PRODUCTOS.forEach((_,i)=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>document.querySelector(`[data-producto="${i}"][data-campo="${c}"]`).value!=="");if(ok)completados++});const p=Math.round(completados/PRODUCTOS.length*100);document.getElementById("progress").style.width=p+"%";document.getElementById("progressText").textContent=`${completados} / ${PRODUCTOS.length} productos`;document.getElementById("progressPercent").textContent=p+"%"}
+document.addEventListener("input",actualizarProgreso);
+function obtenerRegistros(){const fecha=fechaInput.value,usuario=usuarioInput.value,out=[];PRODUCTOS.forEach((producto,i)=>{const get=c=>document.querySelector(`[data-producto="${i}"][data-campo="${c}"]`).value;const inicial=get("inicial"),reposicion=get("reposicion"),sobrante=get("sobrante"),merma=get("merma");if([inicial,reposicion,sobrante,merma].some(v=>v!=="")){const a=+inicial||0,b=+reposicion||0,c=+sobrante||0,d=+merma||0;out.push({fecha,usuario,producto,inicial:a,reposicion:b,sobrante:c,merma:d,consumo:a+b-c,mermaPorcentaje:(a+b)>0?d/(a+b):0})}});return out}
+function guardarControl(){if(!fechaInput.value)return mostrarMensaje("Selecciona una fecha.","warning");if(!usuarioInput.value)return mostrarMensaje("Selecciona el usuario.","warning");const r=obtenerRegistros();if(!r.length)return mostrarMensaje("Introduce al menos un producto.","warning");const old=JSON.parse(localStorage.getItem("controlDiario")||"[]");localStorage.setItem("controlDiario",JSON.stringify(old.concat(r)));mostrarMensaje("✓ Control guardado correctamente: "+r.length+" productos.","success");mostrarHistorial()}
+function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block"}
+function limpiarFormulario(){if(!confirm("¿Quieres borrar lo introducido en este formulario?"))return;document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();document.getElementById("mensaje").style.display="none"}
+function mostrarHistorial(){const r=JSON.parse(localStorage.getItem("controlDiario")||"[]"),g={};r.forEach(x=>{const k=x.fecha+" · "+x.usuario;g[k]=(g[k]||0)+1});const h=document.getElementById("historial"),keys=Object.keys(g).reverse().slice(0,10);h.innerHTML=keys.length?keys.map(k=>`<div class="history-row"><strong>${k}</strong><br><span class="muted">${g[k]} productos registrados</span></div>`).join(""):'<div class="muted">No hay controles guardados todavía.</div>'}
+function exportarCSV(){const r=JSON.parse(localStorage.getItem("controlDiario")||"[]");if(!r.length)return alert("No hay registros para exportar.");const c=["fecha","usuario","producto","inicial","reposicion","sobrante","merma","consumo","mermaPorcentaje"],csv=[c.join(";"),...r.map(x=>c.map(k=>String(x[k]??"").replaceAll("; ",",")).join(";"))].join("\n"),blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="control_diario.csv";a.click()}
+crearProductos();mostrarHistorial();actualizarProgreso();
+</script>
 </body>
 </html>
