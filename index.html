@@ -22,6 +22,22 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 .message{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}.success{background:#e8f7ef;color:#19724a}.warning{background:#fff4df;color:#8a5a00}
 .history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:13px}.muted{color:#657786;font-size:12px}
 @media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
+
+.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px}
+.metric{background:#f7fafc;border:1px solid #e5edf3;border-radius:12px;padding:11px}
+.metric-label{font-size:10px;font-weight:bold;color:#657786;text-transform:uppercase}
+.metric-value{font-size:22px;font-weight:bold;margin-top:4px;color:#173F5F}
+.metric-sub{font-size:11px;color:#657786;margin-top:2px}
+.dashboard-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px}
+.dashboard-table th,.dashboard-table td{padding:8px 6px;border-bottom:1px solid #edf1f4;text-align:right}
+.dashboard-table th:first-child,.dashboard-table td:first-child{text-align:left}
+.dashboard-table th{font-size:10px;text-transform:uppercase;color:#657786}
+.small-btn{width:auto;padding:9px 12px;font-size:12px;margin-top:8px}
+.calc-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.calc-box{background:#f7fafc;border:1px solid #e5edf3;border-radius:9px;padding:8px;text-align:center}
+.calc-title{font-size:9px;color:#657786;font-weight:bold;text-transform:uppercase}
+.calc-value{font-weight:bold;font-size:13px;margin-top:3px}
+@media(max-width:480px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}.dashboard-table{font-size:11px}.dashboard-table th,.dashboard-table td{padding:7px 4px}}
 </style>
 </head>
 <body>
@@ -36,6 +52,22 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 <div class="section-title">Progreso del control</div>
 <div class="progress-wrap"><div id="progress" class="progress"></div></div>
 <div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
+</section>
+<section class="card">
+<div class="section-title">Dashboard diario</div>
+<div class="muted">Resumen de todos los registros guardados para la fecha seleccionada.</div>
+<div class="dashboard-grid">
+  <div class="metric"><div class="metric-label">Productos registrados</div><div class="metric-value" id="dashProductos">0</div><div class="metric-sub" id="dashControles">0 controles</div></div>
+  <div class="metric"><div class="metric-label">Inicial</div><div class="metric-value" id="dashInicial">0</div></div>
+  <div class="metric"><div class="metric-label">Reposición</div><div class="metric-value" id="dashReposicion">0</div></div>
+  <div class="metric"><div class="metric-label">Sobrante</div><div class="metric-value" id="dashSobrante">0</div></div>
+  <div class="metric"><div class="metric-label">Consumo</div><div class="metric-value" id="dashConsumo">0</div></div>
+  <div class="metric"><div class="metric-label">Merma</div><div class="metric-value" id="dashMerma">0</div></div>
+  <div class="metric"><div class="metric-label">% Merma</div><div class="metric-value" id="dashMermaPct">0,00%</div><div class="metric-sub">sobre inicial + reposición</div></div>
+  <div class="metric"><div class="metric-label">Trabajadores</div><div class="metric-value" id="dashTrabajadores">0</div></div>
+</div>
+<button class="btn-secondary small-btn" onclick="actualizarDashboard()">Actualizar dashboard</button>
+<div id="dashboardDetalle"></div>
 </section>
 <section class="card"><div class="section-title">Productos</div><div id="productos"></div></section>
 <section class="card">
@@ -99,7 +131,9 @@ async function cargarDatosIniciales() {
 
     crearProductos();
     actualizarProgreso();
+    actualizarCalculos();
     await mostrarHistorial();
+    await actualizarDashboard();
     await cargarControlExistente();
 
   } catch (error) {
@@ -149,6 +183,10 @@ function crearProductos() {
                  data-campo="merma"
                  inputmode="numeric">
         </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-box"><div class="calc-title">Consumo</div><div class="calc-value" data-calculo="consumo" data-producto="${producto.id}">0</div></div>
+        <div class="calc-box"><div class="calc-title">% Merma</div><div class="calc-value" data-calculo="mermaPct" data-producto="${producto.id}">0,00%</div></div>
       </div>`;
     productosContainer.appendChild(bloque);
   });
@@ -161,6 +199,29 @@ function escapeHtml(text) {
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+function calcularProducto(productoId) {
+  const get = campo => {
+    const el = document.querySelector(`[data-producto="${productoId}"][data-campo="${campo}"]`);
+    return el ? Number(el.value) || 0 : 0;
+  };
+  const inicial = get("inicial");
+  const reposicion = get("reposicion");
+  const sobrante = get("sobrante");
+  const merma = get("merma");
+  const base = inicial + reposicion;
+  const consumo = base - sobrante;
+  const mermaPct = base > 0 ? (merma / base) * 100 : 0;
+  const consumoEl = document.querySelector(`[data-calculo="consumo"][data-producto="${productoId}"]`);
+  const mermaEl = document.querySelector(`[data-calculo="mermaPct"][data-producto="${productoId}"]`);
+  if (consumoEl) consumoEl.textContent = String(consumo);
+  if (mermaEl) mermaEl.textContent = mermaPct.toFixed(2).replace('.', ',') + '%';
+  return {inicial,reposicion,sobrante,merma,consumo,mermaPct};
+}
+
+function actualizarCalculos() {
+  PRODUCTOS.forEach(p => calcularProducto(p.id));
 }
 
 function actualizarProgreso() {
@@ -186,7 +247,7 @@ function actualizarProgreso() {
   document.getElementById("progressPercent").textContent = p + "%";
 }
 
-document.addEventListener("input", actualizarProgreso);
+document.addEventListener("input", () => { actualizarProgreso(); actualizarCalculos(); });
 fechaInput.addEventListener("change", cargarControlExistente);
 usuarioInput.addEventListener("change", cargarControlExistente);
 
@@ -256,6 +317,8 @@ async function cargarControlExistente() {
     });
 
     actualizarProgreso();
+    actualizarCalculos();
+    await actualizarDashboard();
 
     if (registros.length) {
       mostrarMensaje(
@@ -323,6 +386,7 @@ async function guardarControl() {
 
     await cargarControlExistente();
     await mostrarHistorial();
+    await actualizarDashboard();
 
   } catch (error) {
     console.error(error);
@@ -351,6 +415,7 @@ function limpiarFormulario() {
     .forEach(i => i.value = "");
 
   actualizarProgreso();
+  actualizarCalculos();
   document.getElementById("mensaje").style.display = "none";
 }
 
@@ -389,6 +454,68 @@ async function mostrarHistorial() {
     console.error(error);
     h.innerHTML =
       '<div class="muted">No se ha podido cargar el historial.</div>';
+  }
+}
+
+async function actualizarDashboard() {
+  const fecha = fechaInput.value;
+  if (!fecha) return;
+
+  try {
+    const registros = await supabaseGet(
+      "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=eq." + encodeURIComponent(fecha)
+    );
+
+    const totales = registros.reduce((acc, r) => {
+      acc.inicial += Number(r.inicial) || 0;
+      acc.reposicion += Number(r.reposicion) || 0;
+      acc.sobrante += Number(r.sobrante) || 0;
+      acc.merma += Number(r.merma) || 0;
+      return acc;
+    }, {inicial:0,reposicion:0,sobrante:0,merma:0});
+
+    totales.consumo = totales.inicial + totales.reposicion - totales.sobrante;
+    const base = totales.inicial + totales.reposicion;
+    totales.mermaPct = base > 0 ? (totales.merma / base) * 100 : 0;
+
+    const trabajadores = new Set(registros.map(r => r.usuario_id)).size;
+
+    document.getElementById('dashProductos').textContent = registros.length;
+    document.getElementById('dashControles').textContent = trabajadores + (trabajadores === 1 ? ' control' : ' controles');
+    document.getElementById('dashInicial').textContent = totales.inicial;
+    document.getElementById('dashReposicion').textContent = totales.reposicion;
+    document.getElementById('dashSobrante').textContent = totales.sobrante;
+    document.getElementById('dashConsumo').textContent = totales.consumo;
+    document.getElementById('dashMerma').textContent = totales.merma;
+    document.getElementById('dashMermaPct').textContent = totales.mermaPct.toFixed(2).replace('.', ',') + '%';
+    document.getElementById('dashTrabajadores').textContent = trabajadores;
+
+    const productos = Object.fromEntries(PRODUCTOS.map(p => [p.id, p.nombre]));
+    const detalle = {};
+    registros.forEach(r => {
+      const id = String(r.producto_id);
+      if (!detalle[id]) detalle[id] = {producto:productos[r.producto_id] || 'Producto', consumo:0, merma:0, base:0};
+      const inicial = Number(r.inicial) || 0;
+      const reposicion = Number(r.reposicion) || 0;
+      const sobrante = Number(r.sobrante) || 0;
+      detalle[id].consumo += inicial + reposicion - sobrante;
+      detalle[id].merma += Number(r.merma) || 0;
+      detalle[id].base += inicial + reposicion;
+    });
+
+    const filas = Object.values(detalle)
+      .sort((a,b) => (b.consumo + b.merma) - (a.consumo + a.merma))
+      .map(x => {
+        const pct = x.base > 0 ? (x.merma / x.base) * 100 : 0;
+        return `<tr><td>${escapeHtml(x.producto)}</td><td>${x.consumo}</td><td>${x.merma}</td><td>${pct.toFixed(2).replace('.', ',')}%</td></tr>`;
+      }).join('');
+
+    document.getElementById('dashboardDetalle').innerHTML = registros.length ?
+      `<table class="dashboard-table"><thead><tr><th>Producto</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody>${filas}</tbody></table>` :
+      '<div class="muted" style="margin-top:12px">No hay registros guardados para esta fecha.</div>';
+  } catch (error) {
+    console.error(error);
+    document.getElementById('dashboardDetalle').innerHTML = '<div class="muted" style="margin-top:12px">No se pudo cargar el dashboard.</div>';
   }
 }
 
