@@ -245,13 +245,21 @@ async function guardarControl() {
       body: JSON.stringify(registros)
     });
 
+    const cuerpo = await respuesta.text();
+
     if (!respuesta.ok) {
-      const error = await respuesta.text();
-      throw new Error("HTTP " + respuesta.status + ": " + (error || "Error desconocido"));
+      throw new Error("HTTP " + respuesta.status + ": " + (cuerpo || "Error desconocido"));
+    }
+
+    let filasGuardadas = [];
+    try { filasGuardadas = cuerpo ? JSON.parse(cuerpo) : []; } catch (_) {}
+
+    if (!Array.isArray(filasGuardadas) || filasGuardadas.length === 0) {
+      throw new Error("Supabase respondió sin confirmar ninguna fila guardada.");
     }
 
     mostrarMensaje(
-      "✓ Control guardado correctamente: " + registros.length + " productos.",
+      "✓ Supabase confirmó el guardado de " + filasGuardadas.length + " productos.",
       "success"
     );
 
