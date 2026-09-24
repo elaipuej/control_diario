@@ -25,7 +25,7 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 </style>
 </head>
 <body>
-<header><div class="header-inner"><h1>Control Diario</h1><div class="subtitle">Registro diario de productos</div></div></header>
+<header><div class="header-inner"><h1>Control Diario</h1><div class="subtitle">Registro diario de productos · Datos compartidos</div></div></header>
 <main>
 <section class="card">
 <label for="fecha">Fecha</label><input id="fecha" type="date">
@@ -44,7 +44,7 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 <div id="mensaje" class="message"></div>
 </section>
 <section class="card">
-<div class="section-title">Últimos controles guardados en este dispositivo</div>
+<div class="section-title">Últimos controles guardados</div>
 <div id="historial"><div class="muted">No hay controles guardados todavía.</div></div>
 <button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button>
 </section>
@@ -69,7 +69,15 @@ const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
 const productosContainer = document.getElementById("productos");
 
-fechaInput.value = new Date().toISOString().slice(0,10);
+function fechaLocalISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+fechaInput.value = fechaLocalISO();
 
 async function supabaseGet(path) {
   const r = await fetch(API + path, { headers });
@@ -92,6 +100,7 @@ async function cargarDatosIniciales() {
     crearProductos();
     actualizarProgreso();
     await mostrarHistorial();
+    await cargarControlExistente();
 
   } catch (error) {
     console.error(error);
@@ -178,6 +187,8 @@ function actualizarProgreso() {
 }
 
 document.addEventListener("input", actualizarProgreso);
+fechaInput.addEventListener("change", cargarControlExistente);
+usuarioInput.addEventListener("change", cargarControlExistente);
 
 function obtenerRegistros() {
   const fecha = fechaInput.value;
@@ -211,6 +222,53 @@ function obtenerRegistros() {
   });
 
   return out;
+}
+
+async function cargarControlExistente() {
+  if (!fechaInput.value || !usuarioInput.value || !PRODUCTOS.length) return;
+
+  try {
+    const registros = await supabaseGet(
+      "/registros?select=producto_id,inicial,reposicion,sobrante,merma&fecha=eq." +
+      encodeURIComponent(fechaInput.value) +
+      "&usuario_id=eq." + encodeURIComponent(usuarioInput.value)
+    );
+
+    // Limpiar primero el formulario.
+    document
+      .querySelectorAll('input[type="number"]')
+      .forEach(i => i.value = "");
+
+    const porProducto = Object.fromEntries(
+      registros.map(r => [String(r.producto_id), r])
+    );
+
+    PRODUCTOS.forEach(producto => {
+      const r = porProducto[String(producto.id)];
+      if (!r) return;
+
+      ["inicial","reposicion","sobrante","merma"].forEach(campo => {
+        const el = document.querySelector(
+          `[data-producto="${producto.id}"][data-campo="${campo}"]`
+        );
+        if (el) el.value = r[campo] ?? 0;
+      });
+    });
+
+    actualizarProgreso();
+
+    if (registros.length) {
+      mostrarMensaje(
+        `Se han cargado ${registros.length} productos ya registrados para esta fecha y usuario.`,
+        "success"
+      );
+    } else {
+      document.getElementById("mensaje").style.display = "none";
+    }
+  } catch (error) {
+    console.error(error);
+    mostrarMensaje("No se pudo cargar el control existente: " + error.message, "warning");
+  }
 }
 
 async function guardarControl() {
@@ -259,10 +317,11 @@ async function guardarControl() {
     }
 
     mostrarMensaje(
-      "✓ Supabase confirmó el guardado de " + filasGuardadas.length + " productos.",
+      "✓ Supabase confirmó el guardado de " + filasGuardadas.length + " producto" + (filasGuardadas.length === 1 ? "" : "s") + ".",
       "success"
     );
 
+    await cargarControlExistente();
     await mostrarHistorial();
 
   } catch (error) {
