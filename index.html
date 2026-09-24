@@ -50,27 +50,355 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 </section>
 </main>
 <script>
-const PRODUCTOS=["Bocadillo California York", "Bocadillo Italiano de pavo", "Bocadillo vegetal", "Bocadillo de jamón", "Wrap nórdico", "Bocadillo César", "Santoña con bonito", "Pollo al curry", "Playero de ensaladilla", "Las Landas", "Sándwich huevo y bacon", "Paté de verduras", "Bocadillo de tortilla de patatas", "Burrito de cochinita pibil", "Bocadillo de pollo", "Bocadillo Cubano", "Mollete piripi", "Focaccia Lower East", "Combo Fuji", "Combo Tokio", "Combo California Teriyaki Pollo", "Poke Hawaiano de Pavo", "Poke Maui de salmón", "Arroz chaufa con ternera", "Noodles Pad Thai con pollo", "Tortilla de patata", "Salmorejo cordobés", "Crema del día (Olivo)", "Green detox de manzana", "Antioxidante zanahoria", "Smoothie proteico de plátano", "Smoothie de mango", "Smoothie proteico de frutos rojos", "Hummus", "Ensaladilla tradicional", "Naranja", "Bocadillo SIN GLUTEN 1", "Bocadillo SIN GLUTEN 2"];
-const fechaInput=document.getElementById("fecha"),usuarioInput=document.getElementById("usuario"),productosContainer=document.getElementById("productos");
-fechaInput.value=new Date().toISOString().slice(0,10);
-function crearProductos(){PRODUCTOS.forEach((producto,indice)=>{const bloque=document.createElement("div");bloque.className="product";bloque.innerHTML=`
-<div class="product-name">${indice+1}. ${escapeHtml(producto)}</div>
-<div class="fields">
-<div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="inicial" inputmode="numeric"></div>
-<div><div class="field-title">REPOSICIÓN</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="reposicion" inputmode="numeric"></div>
-<div><div class="field-title">SOBRANTE</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="sobrante" inputmode="numeric"></div>
-<div><div class="field-title">MERMA</div><input type="number" min="0" step="1" data-producto="${indice}" data-campo="merma" inputmode="numeric"></div>
-</div>`;productosContainer.appendChild(bloque)})}
-function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-function actualizarProgreso(){let completados=0;PRODUCTOS.forEach((_,i)=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>document.querySelector(`[data-producto="${i}"][data-campo="${c}"]`).value!=="");if(ok)completados++});const p=Math.round(completados/PRODUCTOS.length*100);document.getElementById("progress").style.width=p+"%";document.getElementById("progressText").textContent=`${completados} / ${PRODUCTOS.length} productos`;document.getElementById("progressPercent").textContent=p+"%"}
-document.addEventListener("input",actualizarProgreso);
-function obtenerRegistros(){const fecha=fechaInput.value,usuario=usuarioInput.value,out=[];PRODUCTOS.forEach((producto,i)=>{const get=c=>document.querySelector(`[data-producto="${i}"][data-campo="${c}"]`).value;const inicial=get("inicial"),reposicion=get("reposicion"),sobrante=get("sobrante"),merma=get("merma");if([inicial,reposicion,sobrante,merma].some(v=>v!=="")){const a=+inicial||0,b=+reposicion||0,c=+sobrante||0,d=+merma||0;out.push({fecha,usuario,producto,inicial:a,reposicion:b,sobrante:c,merma:d,consumo:a+b-c,mermaPorcentaje:(a+b)>0?d/(a+b):0})}});return out}
-function guardarControl(){if(!fechaInput.value)return mostrarMensaje("Selecciona una fecha.","warning");if(!usuarioInput.value)return mostrarMensaje("Selecciona el usuario.","warning");const r=obtenerRegistros();if(!r.length)return mostrarMensaje("Introduce al menos un producto.","warning");const old=JSON.parse(localStorage.getItem("controlDiario")||"[]");localStorage.setItem("controlDiario",JSON.stringify(old.concat(r)));mostrarMensaje("✓ Control guardado correctamente: "+r.length+" productos.","success");mostrarHistorial()}
-function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block"}
-function limpiarFormulario(){if(!confirm("¿Quieres borrar lo introducido en este formulario?"))return;document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();document.getElementById("mensaje").style.display="none"}
-function mostrarHistorial(){const r=JSON.parse(localStorage.getItem("controlDiario")||"[]"),g={};r.forEach(x=>{const k=x.fecha+" · "+x.usuario;g[k]=(g[k]||0)+1});const h=document.getElementById("historial"),keys=Object.keys(g).reverse().slice(0,10);h.innerHTML=keys.length?keys.map(k=>`<div class="history-row"><strong>${k}</strong><br><span class="muted">${g[k]} productos registrados</span></div>`).join(""):'<div class="muted">No hay controles guardados todavía.</div>'}
-function exportarCSV(){const r=JSON.parse(localStorage.getItem("controlDiario")||"[]");if(!r.length)return alert("No hay registros para exportar.");const c=["fecha","usuario","producto","inicial","reposicion","sobrante","merma","consumo","mermaPorcentaje"],csv=[c.join(";"),...r.map(x=>c.map(k=>String(x[k]??"").replaceAll("; ",",")).join(";"))].join("\n"),blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="control_diario.csv";a.click()}
-crearProductos();mostrarHistorial();actualizarProgreso();
+/* ================================
+   CONEXIÓN CON SUPABASE
+   ================================ */
+const SUPABASE_URL = "https://dsgjwaovruukvlezcdnp.supabase.co";
+const SUPABASE_KEY = "sb_publishable_6hvO0W5rYKVpSgGuWBXnTA_J8CtzfqS";
+
+const API = SUPABASE_URL + "/rest/v1";
+const headers = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json"
+};
+
+let PRODUCTOS = [];
+let USUARIOS = [];
+
+const fechaInput = document.getElementById("fecha");
+const usuarioInput = document.getElementById("usuario");
+const productosContainer = document.getElementById("productos");
+
+fechaInput.value = new Date().toISOString().slice(0,10);
+
+async function supabaseGet(path) {
+  const r = await fetch(API + path, { headers });
+  if (!r.ok) {
+    const error = await r.text();
+    throw new Error(error || ("Error HTTP " + r.status));
+  }
+  return r.json();
+}
+
+async function cargarDatosIniciales() {
+  try {
+    PRODUCTOS = await supabaseGet("/productos?activo=eq.true&order=orden.asc");
+    USUARIOS = await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
+
+    usuarioInput.innerHTML =
+      '<option value="">Seleccionar usuario...</option>' +
+      USUARIOS.map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
+
+    crearProductos();
+    actualizarProgreso();
+    await mostrarHistorial();
+
+  } catch (error) {
+    console.error(error);
+    mostrarMensaje(
+      "No se ha podido conectar con la base de datos. Comprueba la conexión a Supabase.",
+      "warning"
+    );
+  }
+}
+
+function crearProductos() {
+  productosContainer.innerHTML = "";
+
+  PRODUCTOS.forEach((producto, indice) => {
+    const bloque = document.createElement("div");
+    bloque.className = "product";
+
+    bloque.innerHTML = `
+      <div class="product-name">${indice + 1}. ${escapeHtml(producto.nombre)}</div>
+      <div class="fields">
+        <div>
+          <div class="field-title">INICIAL</div>
+          <input type="number" min="0" step="1"
+                 data-producto="${producto.id}"
+                 data-campo="inicial"
+                 inputmode="numeric">
+        </div>
+        <div>
+          <div class="field-title">REPOSICIÓN</div>
+          <input type="number" min="0" step="1"
+                 data-producto="${producto.id}"
+                 data-campo="reposicion"
+                 inputmode="numeric">
+        </div>
+        <div>
+          <div class="field-title">SOBRANTE</div>
+          <input type="number" min="0" step="1"
+                 data-producto="${producto.id}"
+                 data-campo="sobrante"
+                 inputmode="numeric">
+        </div>
+        <div>
+          <div class="field-title">MERMA</div>
+          <input type="number" min="0" step="1"
+                 data-producto="${producto.id}"
+                 data-campo="merma"
+                 inputmode="numeric">
+        </div>
+      </div>`;
+    productosContainer.appendChild(bloque);
+  });
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function actualizarProgreso() {
+  let completados = 0;
+
+  PRODUCTOS.forEach(producto => {
+    const ok = ["inicial","reposicion","sobrante","merma"].some(c => {
+      const el = document.querySelector(
+        `[data-producto="${producto.id}"][data-campo="${c}"]`
+      );
+      return el && el.value !== "";
+    });
+
+    if (ok) completados++;
+  });
+
+  const total = PRODUCTOS.length || 1;
+  const p = Math.round(completados / total * 100);
+
+  document.getElementById("progress").style.width = p + "%";
+  document.getElementById("progressText").textContent =
+    `${completados} / ${PRODUCTOS.length} productos`;
+  document.getElementById("progressPercent").textContent = p + "%";
+}
+
+document.addEventListener("input", actualizarProgreso);
+
+function obtenerRegistros() {
+  const fecha = fechaInput.value;
+  const usuarioId = Number(usuarioInput.value);
+  const out = [];
+
+  PRODUCTOS.forEach(producto => {
+    const get = campo => {
+      const el = document.querySelector(
+        `[data-producto="${producto.id}"][data-campo="${campo}"]`
+      );
+      return el ? el.value : "";
+    };
+
+    const inicial = get("inicial");
+    const reposicion = get("reposicion");
+    const sobrante = get("sobrante");
+    const merma = get("merma");
+
+    if ([inicial, reposicion, sobrante, merma].some(v => v !== "")) {
+      out.push({
+        fecha,
+        usuario_id: usuarioId,
+        producto_id: producto.id,
+        inicial: Number(inicial) || 0,
+        reposicion: Number(reposicion) || 0,
+        sobrante: Number(sobrante) || 0,
+        merma: Number(merma) || 0
+      });
+    }
+  });
+
+  return out;
+}
+
+async function guardarControl() {
+  if (!fechaInput.value) {
+    mostrarMensaje("Selecciona una fecha.", "warning");
+    return;
+  }
+
+  if (!usuarioInput.value) {
+    mostrarMensaje("Selecciona el usuario.", "warning");
+    return;
+  }
+
+  const registros = obtenerRegistros();
+
+  if (!registros.length) {
+    mostrarMensaje("Introduce al menos un producto.", "warning");
+    return;
+  }
+
+  const boton = document.querySelector(".btn-primary");
+  boton.disabled = true;
+  boton.textContent = "GUARDANDO...";
+
+  try {
+    const respuesta = await fetch(API + "/registros?on_conflict=fecha,usuario_id,producto_id", {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Prefer": "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify(registros)
+    });
+
+    if (!respuesta.ok) {
+      const error = await respuesta.text();
+      throw new Error(error || ("Error HTTP " + respuesta.status));
+    }
+
+    mostrarMensaje(
+      "✓ Control guardado correctamente: " + registros.length + " productos.",
+      "success"
+    );
+
+    await mostrarHistorial();
+
+  } catch (error) {
+    console.error(error);
+    mostrarMensaje(
+      "No se pudo guardar el control. Revisa la conexión y vuelve a intentarlo.",
+      "warning"
+    );
+  } finally {
+    boton.disabled = false;
+    boton.textContent = "GUARDAR CONTROL";
+  }
+}
+
+function mostrarMensaje(texto, tipo) {
+  const m = document.getElementById("mensaje");
+  m.textContent = texto;
+  m.className = "message " + tipo;
+  m.style.display = "block";
+}
+
+function limpiarFormulario() {
+  if (!confirm("¿Quieres borrar lo introducido en este formulario?")) return;
+
+  document
+    .querySelectorAll('input[type="number"]')
+    .forEach(i => i.value = "");
+
+  actualizarProgreso();
+  document.getElementById("mensaje").style.display = "none";
+}
+
+async function mostrarHistorial() {
+  const h = document.getElementById("historial");
+
+  try {
+    const registros = await supabaseGet(
+      "/registros?select=fecha,usuario_id&order=creado_en.desc&limit=200"
+    );
+
+    const nombres = Object.fromEntries(
+      USUARIOS.map(u => [u.id, u.nombre])
+    );
+
+    const grupos = {};
+
+    registros.forEach(r => {
+      const nombre = nombres[r.usuario_id] || "Usuario";
+      const k = r.fecha + " · " + nombre;
+      grupos[k] = (grupos[k] || 0) + 1;
+    });
+
+    const keys = Object.keys(grupos).slice(0, 10);
+
+    h.innerHTML = keys.length
+      ? keys.map(k =>
+          `<div class="history-row">
+             <strong>${escapeHtml(k)}</strong><br>
+             <span class="muted">${grupos[k]} productos registrados</span>
+           </div>`
+        ).join("")
+      : '<div class="muted">No hay controles guardados todavía.</div>';
+
+  } catch (error) {
+    console.error(error);
+    h.innerHTML =
+      '<div class="muted">No se ha podido cargar el historial.</div>';
+  }
+}
+
+async function exportarCSV() {
+  try {
+    const registros = await supabaseGet(
+      "/registros?select=fecha,hora,usuario_id,producto_id,inicial,reposicion,sobrante,merma,observaciones&order=fecha.asc,hora.asc"
+    );
+
+    if (!registros.length) {
+      alert("No hay registros para exportar.");
+      return;
+    }
+
+    const usuarios = Object.fromEntries(
+      USUARIOS.map(u => [u.id, u.nombre])
+    );
+
+    const productos = Object.fromEntries(
+      PRODUCTOS.map(p => [p.id, p.nombre])
+    );
+
+    const columnas = [
+      "fecha","hora","usuario","producto",
+      "inicial","reposicion","sobrante","merma",
+      "consumo","mermaPorcentaje","observaciones"
+    ];
+
+    const filas = registros.map(r => {
+      const base = r.inicial + r.reposicion;
+      const consumo = base - r.sobrante;
+      const mermaPorcentaje = base > 0 ? r.merma / base : 0;
+
+      return [
+        r.fecha,
+        r.hora || "",
+        usuarios[r.usuario_id] || "",
+        productos[r.producto_id] || "",
+        r.inicial,
+        r.reposicion,
+        r.sobrante,
+        r.merma,
+        consumo,
+        mermaPorcentaje,
+        r.observaciones || ""
+      ];
+    });
+
+    const csv = [
+      columnas.join(";"),
+      ...filas.map(f =>
+        f.map(v =>
+          String(v ?? "")
+            .replaceAll(";", ",")
+            .replaceAll("\n", " ")
+        ).join(";")
+      )
+    ].join("\n");
+
+    const blob = new Blob(["\ufeff" + csv], {
+      type: "text/csv;charset=utf-8;"
+    });
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "control_diario.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+  } catch (error) {
+    console.error(error);
+    alert("No se ha podido exportar el CSV.");
+  }
+}
+
+cargarDatosIniciales();
 </script>
 </body>
 </html>
