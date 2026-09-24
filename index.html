@@ -55,7 +55,9 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 </section>
 <section class="card">
 <div class="section-title">Dashboard diario</div>
-<div class="muted">Resumen de todos los registros guardados para la fecha seleccionada.</div>
+<div class="muted">Resumen de los registros guardados para la fecha seleccionada. Puedes ver todos los trabajadores o filtrar por uno.</div>
+<label for="dashboardUsuario">Ver datos de</label>
+<select id="dashboardUsuario"><option value="">Todos los trabajadores</option></select>
 <div class="dashboard-grid">
   <div class="metric"><div class="metric-label">Productos registrados</div><div class="metric-value" id="dashProductos">0</div><div class="metric-sub" id="dashControles">0 controles</div></div>
   <div class="metric"><div class="metric-label">Inicial</div><div class="metric-value" id="dashInicial">0</div></div>
@@ -99,6 +101,7 @@ let USUARIOS = [];
 
 const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
+const dashboardUsuarioInput = document.getElementById("dashboardUsuario");
 const productosContainer = document.getElementById("productos");
 
 function fechaLocalISO() {
@@ -127,6 +130,10 @@ async function cargarDatosIniciales() {
 
     usuarioInput.innerHTML =
       '<option value="">Seleccionar usuario...</option>' +
+      USUARIOS.map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
+
+    dashboardUsuarioInput.innerHTML =
+      '<option value="">Todos los trabajadores</option>' +
       USUARIOS.map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
 
     crearProductos();
@@ -248,8 +255,12 @@ function actualizarProgreso() {
 }
 
 document.addEventListener("input", () => { actualizarProgreso(); actualizarCalculos(); });
-fechaInput.addEventListener("change", cargarControlExistente);
+fechaInput.addEventListener("change", async () => {
+  await cargarControlExistente();
+  await actualizarDashboard();
+});
 usuarioInput.addEventListener("change", cargarControlExistente);
+dashboardUsuarioInput.addEventListener("change", actualizarDashboard);
 
 function obtenerRegistros() {
   const fecha = fechaInput.value;
@@ -462,9 +473,12 @@ async function actualizarDashboard() {
   if (!fecha) return;
 
   try {
-    const registros = await supabaseGet(
-      "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=eq." + encodeURIComponent(fecha)
-    );
+    const dashboardUsuario = dashboardUsuarioInput.value;
+    let ruta = "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=eq." + encodeURIComponent(fecha);
+    if (dashboardUsuario) {
+      ruta += "&usuario_id=eq." + encodeURIComponent(dashboardUsuario);
+    }
+    const registros = await supabaseGet(ruta);
 
     const totales = registros.reduce((acc, r) => {
       acc.inicial += Number(r.inicial) || 0;
