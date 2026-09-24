@@ -55,6 +55,10 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 .range-summary{margin-top:8px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px}
 .range-select{margin-top:2px}
 @media(max-width:480px){.date-range-row{grid-template-columns:1fr 1fr}}
+
+.top10-chart{margin-top:14px}.chart-wrap{display:flex;flex-direction:column;gap:9px;margin-top:10px}.chart-row{display:grid;grid-template-columns:minmax(150px,1.7fr) minmax(90px,3fr) 52px;gap:8px;align-items:center}.chart-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chart-track{height:20px;background:#edf2f6;border-radius:7px;overflow:hidden}.chart-fill{height:100%;background:#1976D2;border-radius:7px;min-width:2px}.chart-value{text-align:right;font-size:12px;font-weight:bold}.chart-empty{padding:14px;border:1px dashed #d7e1e8;border-radius:10px;color:#657786;font-size:12px}
+@media(max-width:480px){.chart-row{grid-template-columns:minmax(120px,1.5fr) minmax(70px,2fr) 45px;gap:6px}.chart-label{font-size:10px}.chart-value{font-size:11px}}
+.tools-card .tool-link{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:13px;margin-top:10px;font-weight:bold}.primary-link{background:#1976D2;color:#fff}.tools-card .tool-link:hover{filter:brightness(.97)}
 </style>
 </head>
 <body>
@@ -70,778 +74,122 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 <div class="progress-wrap"><div id="progress" class="progress"></div></div>
 <div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
 </section>
-<section class="card">
-<div class="section-title">Dashboard diario</div>
-<div class="muted">Resumen de los registros guardados para la fecha seleccionada. Puedes ver todos los trabajadores o filtrar por uno.</div>
-<label for="rangoDashboard">Periodo</label>
-<select id="rangoDashboard" class="range-select">
-  <option value="hoy">Hoy</option>
-  <option value="ayer">Ayer</option>
-  <option value="semana">Semana</option>
-  <option value="mes">Mes</option>
-</select>
-<div class="date-range-row">
-  <div><label for="desdeDashboard">Desde</label><input id="desdeDashboard" type="date"></div>
-  <div><label for="hastaDashboard">Hasta</label><input id="hastaDashboard" type="date"></div>
-</div>
-<div id="rangoResumen" class="range-summary">Periodo seleccionado: hoy</div>
-<label for="dashboardUsuario">Ver datos de</label>
-<select id="dashboardUsuario"><option value="">Todos los trabajadores</option></select>
-<div class="dashboard-grid">
-  <div class="metric"><div class="metric-label">Productos registrados</div><div class="metric-value" id="dashProductos">0</div><div class="metric-sub" id="dashControles">0 controles</div></div>
-  <div class="metric"><div class="metric-label">Inicial</div><div class="metric-value" id="dashInicial">0</div></div>
-  <div class="metric"><div class="metric-label">Reposición</div><div class="metric-value" id="dashReposicion">0</div></div>
-  <div class="metric"><div class="metric-label">Sobrante</div><div class="metric-value" id="dashSobrante">0</div></div>
-  <div class="metric"><div class="metric-label">Consumo</div><div class="metric-value" id="dashConsumo">0</div></div>
-  <div class="metric"><div class="metric-label">Merma</div><div class="metric-value" id="dashMerma">0</div></div>
-  <div class="metric"><div class="metric-label">% Merma</div><div class="metric-value" id="dashMermaPct">0,00%</div><div class="metric-sub">sobre inicial + reposición</div></div>
-  <div class="metric"><div class="metric-label">Trabajadores</div><div class="metric-value" id="dashTrabajadores">0</div></div>
-</div>
-<button class="btn-secondary small-btn" onclick="actualizarDashboard()">Actualizar dashboard</button>
-<div id="dashboardComparativas" class="comparison-grid"></div>
-<div id="dashboardDetalle"></div>
-</section>
+
 <section class="card"><div class="section-title">Productos</div><div id="productos"></div></section>
 <section class="card">
 <button class="btn-primary" onclick="guardarControl()">GUARDAR CONTROL</button>
 <button class="btn-secondary" onclick="limpiarFormulario()">Limpiar formulario</button>
 <div id="mensaje" class="message"></div>
 </section>
-<section class="card">
-<div class="section-title">Últimos controles guardados</div>
-<div id="historial"><div class="muted">No hay controles guardados todavía.</div></div>
-<button class="btn-secondary" onclick="exportarCSV()">Exportar CSV</button>
+
+<section class="card tools-card">
+  <div class="section-title">Herramientas</div>
+  <div class="muted">El análisis, historial y exportación están en una página separada para mantener este formulario rápido y limpio.</div>
+  <a class="tool-link primary-link" href="dashboard.html">📊 Abrir Dashboard</a>
 </section>
 </main>
 <script>
-/* ================================
-   CONEXIÓN CON SUPABASE
-   ================================ */
 const SUPABASE_URL = "https://dsgjwaovruukvlezcdnp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6hvO0W5rYKVpSgGuWBXnTA_J8CtzfqS";
-
 const API = SUPABASE_URL + "/rest/v1";
-const headers = {
-  "apikey": SUPABASE_KEY,
-  "Content-Type": "application/json"
-};
+const headers = { "apikey": SUPABASE_KEY, "Content-Type": "application/json" };
 
 let PRODUCTOS = [];
 let USUARIOS = [];
-
 const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
-const dashboardUsuarioInput = document.getElementById("dashboardUsuario");
-const rangoDashboardInput = document.getElementById("rangoDashboard");
-const desdeDashboardInput = document.getElementById("desdeDashboard");
-const hastaDashboardInput = document.getElementById("hastaDashboard");
-const rangoResumen = document.getElementById("rangoResumen");
 const productosContainer = document.getElementById("productos");
 
-function fechaLocalISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
+async function supabaseGet(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||(`HTTP ${r.status}`));return r.json();}
+
+fechaInput.value=fechaLocalISO();
+
+async function cargarDatosIniciales(){
+  try{
+    PRODUCTOS=await supabaseGet("/productos?activo=eq.true&order=orden.asc");
+    USUARIOS=await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
+    usuarioInput.innerHTML='<option value="">Seleccionar usuario...</option>'+USUARIOS.map(u=>`<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
+    crearProductos(); actualizarProgreso(); actualizarCalculos(); await cargarControlExistente();
+  }catch(error){console.error(error);mostrarMensaje("No se ha podido conectar con la base de datos: "+error.message,"warning");}
 }
 
-function parseFechaISO(iso) {
-  const [y,m,d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function formatearFecha(iso) {
-  return parseFechaISO(iso).toLocaleDateString("es-ES", {day:"2-digit", month:"2-digit", year:"numeric"});
-}
-
-function fechaISODesdeDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function obtenerRangoDashboard() {
-  const hoy = parseFechaISO(fechaLocalISO());
-  const opcion = rangoDashboardInput.value;
-  let desde = new Date(hoy);
-  let hasta = new Date(hoy);
-
-  if (opcion === "ayer") {
-    desde.setDate(hoy.getDate() - 1);
-    hasta = new Date(desde);
-  } else if (opcion === "semana") {
-    const dia = hoy.getDay() || 7;
-    desde.setDate(hoy.getDate() - (dia - 1));
-  } else if (opcion === "mes") {
-    desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  }
-
-  return {
-    desde: fechaISODesdeDate(desde),
-    hasta: fechaISODesdeDate(hasta)
-  };
-}
-
-function actualizarControlesRango() {
-  const rango = obtenerRangoDashboard();
-  desdeDashboardInput.value = rango.desde;
-  hastaDashboardInput.value = rango.hasta;
-
-  const labels = {hoy:"Hoy", ayer:"Ayer", semana:"Semana", mes:"Mes"};
-  rangoResumen.textContent = `Periodo: ${labels[rangoDashboardInput.value] || rangoDashboardInput.value} · ${formatearFecha(rango.desde)} → ${formatearFecha(rango.hasta)}`;
-}
-
-fechaInput.value = fechaLocalISO();
-rangoDashboardInput.value = "hoy";
-actualizarControlesRango();
-
-async function supabaseGet(path) {
-  const r = await fetch(API + path, { headers });
-  if (!r.ok) {
-    const error = await r.text();
-    throw new Error(error || ("Error HTTP " + r.status));
-  }
-  return r.json();
-}
-
-async function cargarDatosIniciales() {
-  try {
-    PRODUCTOS = await supabaseGet("/productos?activo=eq.true&order=orden.asc");
-    USUARIOS = await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
-
-    usuarioInput.innerHTML =
-      '<option value="">Seleccionar usuario...</option>' +
-      USUARIOS.map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
-
-    dashboardUsuarioInput.innerHTML =
-      '<option value="">Todos los trabajadores</option>' +
-      USUARIOS.map(u => `<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
-
-    crearProductos();
-    actualizarProgreso();
-    actualizarCalculos();
-    await mostrarHistorial();
-    await actualizarDashboard();
-    await cargarControlExistente();
-
-  } catch (error) {
-    console.error(error);
-    mostrarMensaje(
-      "No se ha podido conectar con la base de datos. Comprueba la conexión a Supabase.",
-      "warning"
-    );
-  }
-}
-
-function crearProductos() {
-  productosContainer.innerHTML = "";
-
-  PRODUCTOS.forEach((producto, indice) => {
-    const bloque = document.createElement("div");
-    bloque.className = "product";
-
-    bloque.innerHTML = `
-      <div class="product-name">${indice + 1}. ${escapeHtml(producto.nombre)}</div>
+function crearProductos(){
+  productosContainer.innerHTML="";
+  PRODUCTOS.forEach((p,i)=>{
+    const b=document.createElement("div"); b.className="product";
+    b.innerHTML=`<div class="product-name">${i+1}. ${escapeHtml(p.nombre)}</div>
       <div class="fields">
-        <div>
-          <div class="field-title">INICIAL</div>
-          <input type="number" min="0" step="1"
-                 data-producto="${producto.id}"
-                 data-campo="inicial"
-                 inputmode="numeric">
-        </div>
-        <div>
-          <div class="field-title">REPOSICIÓN</div>
-          <input type="number" min="0" step="1"
-                 data-producto="${producto.id}"
-                 data-campo="reposicion"
-                 inputmode="numeric">
-        </div>
-        <div>
-          <div class="field-title">SOBRANTE</div>
-          <input type="number" min="0" step="1"
-                 data-producto="${producto.id}"
-                 data-campo="sobrante"
-                 inputmode="numeric">
-        </div>
-        <div>
-          <div class="field-title">MERMA</div>
-          <input type="number" min="0" step="1"
-                 data-producto="${producto.id}"
-                 data-campo="merma"
-                 inputmode="numeric">
-        </div>
+        <div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="inicial" inputmode="numeric"></div>
+        <div><div class="field-title">REPOSICIÓN</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="reposicion" inputmode="numeric"></div>
+        <div><div class="field-title">SOBRANTE</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="sobrante" inputmode="numeric"></div>
+        <div><div class="field-title">MERMA</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="merma" inputmode="numeric"></div>
       </div>
       <div class="calc-row">
-        <div class="calc-box"><div class="calc-title">Consumo</div><div class="calc-value" data-calculo="consumo" data-producto="${producto.id}">0</div></div>
-        <div class="calc-box"><div class="calc-title">% Merma</div><div class="calc-value" data-calculo="mermaPct" data-producto="${producto.id}">0,00%</div></div>
+        <div class="calc-box"><div class="calc-title">Consumo</div><div class="calc-value" data-calculo="consumo" data-producto="${p.id}">0</div></div>
+        <div class="calc-box"><div class="calc-title">% Merma</div><div class="calc-value" data-calculo="mermaPct" data-producto="${p.id}">0,00%</div></div>
       </div>`;
-    productosContainer.appendChild(bloque);
+    productosContainer.appendChild(b);
   });
 }
 
-function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+function calcularProducto(id){
+  const get=c=>{const el=document.querySelector(`[data-producto="${id}"][data-campo="${c}"]`);return el?Number(el.value)||0:0;};
+  const inicial=get("inicial"), reposicion=get("reposicion"), sobrante=get("sobrante"), merma=get("merma");
+  const base=inicial+reposicion, consumo=base-sobrante, pct=base>0?(merma/base)*100:0;
+  const ce=document.querySelector(`[data-calculo="consumo"][data-producto="${id}"]`);
+  const me=document.querySelector(`[data-calculo="mermaPct"][data-producto="${id}"]`);
+  if(ce)ce.textContent=String(consumo); if(me)me.textContent=pct.toFixed(2).replace('.',',')+'%';
+}
+function actualizarCalculos(){PRODUCTOS.forEach(p=>calcularProducto(p.id));}
+function actualizarProgreso(){
+  let n=0; PRODUCTOS.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
+  const pct=Math.round((n/(PRODUCTOS.length||1))*100); document.getElementById("progress").style.width=pct+"%";document.getElementById("progressText").textContent=`${n} / ${PRODUCTOS.length} productos`;document.getElementById("progressPercent").textContent=pct+"%";
 }
 
-function calcularProducto(productoId) {
-  const get = campo => {
-    const el = document.querySelector(`[data-producto="${productoId}"][data-campo="${campo}"]`);
-    return el ? Number(el.value) || 0 : 0;
-  };
-  const inicial = get("inicial");
-  const reposicion = get("reposicion");
-  const sobrante = get("sobrante");
-  const merma = get("merma");
-  const base = inicial + reposicion;
-  const consumo = base - sobrante;
-  const mermaPct = base > 0 ? (merma / base) * 100 : 0;
-  const consumoEl = document.querySelector(`[data-calculo="consumo"][data-producto="${productoId}"]`);
-  const mermaEl = document.querySelector(`[data-calculo="mermaPct"][data-producto="${productoId}"]`);
-  if (consumoEl) consumoEl.textContent = String(consumo);
-  if (mermaEl) mermaEl.textContent = mermaPct.toFixed(2).replace('.', ',') + '%';
-  return {inicial,reposicion,sobrante,merma,consumo,mermaPct};
+document.addEventListener("input",()=>{actualizarProgreso();actualizarCalculos();});
+fechaInput.addEventListener("change",cargarControlExistente);
+usuarioInput.addEventListener("change",cargarControlExistente);
+
+function obtenerRegistros(){
+  const fecha=fechaInput.value, usuarioId=Number(usuarioInput.value), out=[];
+  PRODUCTOS.forEach(p=>{
+    const get=c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el?el.value:"";};
+    const inicial=get("inicial"), reposicion=get("reposicion"), sobrante=get("sobrante"), merma=get("merma");
+    if([inicial,reposicion,sobrante,merma].some(v=>v!=="")) out.push({fecha,usuario_id:usuarioId,producto_id:p.id,inicial:Number(inicial)||0,reposicion:Number(reposicion)||0,sobrante:Number(sobrante)||0,merma:Number(merma)||0});
+  }); return out;
 }
 
-function actualizarCalculos() {
-  PRODUCTOS.forEach(p => calcularProducto(p.id));
+async function cargarControlExistente(){
+  if(!fechaInput.value||!usuarioInput.value||!PRODUCTOS.length)return;
+  try{
+    const rows=await supabaseGet(`/registros?select=producto_id,inicial,reposicion,sobrante,merma&fecha=eq.${encodeURIComponent(fechaInput.value)}&usuario_id=eq.${encodeURIComponent(usuarioInput.value)}`);
+    document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
+    const map=Object.fromEntries(rows.map(r=>[String(r.producto_id),r]));
+    PRODUCTOS.forEach(p=>{const r=map[String(p.id)];if(!r)return;["inicial","reposicion","sobrante","merma"].forEach(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);if(el)el.value=r[c]??0;});});
+    actualizarProgreso();actualizarCalculos();
+    if(rows.length)mostrarMensaje(`Se han cargado ${rows.length} productos registrados para esta fecha y usuario.` ,"success");
+    else document.getElementById("mensaje").style.display="none";
+  }catch(e){console.error(e);mostrarMensaje("No se pudo cargar el control existente: "+e.message,"warning");}
 }
 
-function actualizarProgreso() {
-  let completados = 0;
-
-  PRODUCTOS.forEach(producto => {
-    const ok = ["inicial","reposicion","sobrante","merma"].some(c => {
-      const el = document.querySelector(
-        `[data-producto="${producto.id}"][data-campo="${c}"]`
-      );
-      return el && el.value !== "";
-    });
-
-    if (ok) completados++;
-  });
-
-  const total = PRODUCTOS.length || 1;
-  const p = Math.round(completados / total * 100);
-
-  document.getElementById("progress").style.width = p + "%";
-  document.getElementById("progressText").textContent =
-    `${completados} / ${PRODUCTOS.length} productos`;
-  document.getElementById("progressPercent").textContent = p + "%";
+async function guardarControl(){
+  if(!fechaInput.value){mostrarMensaje("Selecciona una fecha.","warning");return;}
+  if(!usuarioInput.value){mostrarMensaje("Selecciona el usuario.","warning");return;}
+  const registros=obtenerRegistros(); if(!registros.length){mostrarMensaje("Introduce al menos un producto.","warning");return;}
+  const boton=document.querySelector(".btn-primary");boton.disabled=true;boton.textContent="GUARDANDO...";
+  try{
+    const r=await fetch(API+"/registros?on_conflict=fecha,usuario_id,producto_id",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(registros)});
+    const body=await r.text(); if(!r.ok)throw new Error(`HTTP ${r.status}: ${body||"Error desconocido"}`);
+    let rows=[];try{rows=body?JSON.parse(body):[]}catch{}
+    if(!Array.isArray(rows)||rows.length===0)throw new Error("Supabase no confirmó ninguna fila.");
+    mostrarMensaje(`✓ Guardado correctamente: ${rows.length} producto${rows.length===1?"":"s"}.`,"success");
+  }catch(e){console.error(e);mostrarMensaje("No se pudo guardar: "+e.message,"warning");}
+  finally{boton.disabled=false;boton.textContent="GUARDAR CONTROL";}
 }
-
-document.addEventListener("input", () => { actualizarProgreso(); actualizarCalculos(); });
-fechaInput.addEventListener("change", async () => {
-  await cargarControlExistente();
-  await actualizarDashboard();
-});
-usuarioInput.addEventListener("change", cargarControlExistente);
-dashboardUsuarioInput.addEventListener("change", actualizarDashboard);
-rangoDashboardInput.addEventListener("change", async () => {
-  actualizarControlesRango();
-  await actualizarDashboard();
-});
-desdeDashboardInput.addEventListener("change", async () => {
-  rangoDashboardInput.value = "hoy";
-  if (desdeDashboardInput.value === hastaDashboardInput.value && desdeDashboardInput.value === fechaLocalISO()) {
-    rangoDashboardInput.value = "hoy";
-  } else {
-    rangoDashboardInput.value = "custom";
-  }
-  rangoResumen.textContent = `Periodo personalizado: ${formatearFecha(desdeDashboardInput.value)} → ${formatearFecha(hastaDashboardInput.value)}`;
-  await actualizarDashboard();
-});
-hastaDashboardInput.addEventListener("change", async () => {
-  rangoDashboardInput.value = "custom";
-  rangoResumen.textContent = `Periodo personalizado: ${formatearFecha(desdeDashboardInput.value)} → ${formatearFecha(hastaDashboardInput.value)}`;
-  await actualizarDashboard();
-});
-
-function obtenerRegistros() {
-  const fecha = fechaInput.value;
-  const usuarioId = Number(usuarioInput.value);
-  const out = [];
-
-  PRODUCTOS.forEach(producto => {
-    const get = campo => {
-      const el = document.querySelector(
-        `[data-producto="${producto.id}"][data-campo="${campo}"]`
-      );
-      return el ? el.value : "";
-    };
-
-    const inicial = get("inicial");
-    const reposicion = get("reposicion");
-    const sobrante = get("sobrante");
-    const merma = get("merma");
-
-    if ([inicial, reposicion, sobrante, merma].some(v => v !== "")) {
-      out.push({
-        fecha,
-        usuario_id: usuarioId,
-        producto_id: producto.id,
-        inicial: Number(inicial) || 0,
-        reposicion: Number(reposicion) || 0,
-        sobrante: Number(sobrante) || 0,
-        merma: Number(merma) || 0
-      });
-    }
-  });
-
-  return out;
-}
-
-async function cargarControlExistente() {
-  if (!fechaInput.value || !usuarioInput.value || !PRODUCTOS.length) return;
-
-  try {
-    const registros = await supabaseGet(
-      "/registros?select=producto_id,inicial,reposicion,sobrante,merma&fecha=eq." +
-      encodeURIComponent(fechaInput.value) +
-      "&usuario_id=eq." + encodeURIComponent(usuarioInput.value)
-    );
-
-    // Limpiar primero el formulario.
-    document
-      .querySelectorAll('input[type="number"]')
-      .forEach(i => i.value = "");
-
-    const porProducto = Object.fromEntries(
-      registros.map(r => [String(r.producto_id), r])
-    );
-
-    PRODUCTOS.forEach(producto => {
-      const r = porProducto[String(producto.id)];
-      if (!r) return;
-
-      ["inicial","reposicion","sobrante","merma"].forEach(campo => {
-        const el = document.querySelector(
-          `[data-producto="${producto.id}"][data-campo="${campo}"]`
-        );
-        if (el) el.value = r[campo] ?? 0;
-      });
-    });
-
-    actualizarProgreso();
-    actualizarCalculos();
-    await actualizarDashboard();
-
-    if (registros.length) {
-      mostrarMensaje(
-        `Se han cargado ${registros.length} productos ya registrados para esta fecha y usuario.`,
-        "success"
-      );
-    } else {
-      document.getElementById("mensaje").style.display = "none";
-    }
-  } catch (error) {
-    console.error(error);
-    mostrarMensaje("No se pudo cargar el control existente: " + error.message, "warning");
-  }
-}
-
-async function guardarControl() {
-  if (!fechaInput.value) {
-    mostrarMensaje("Selecciona una fecha.", "warning");
-    return;
-  }
-
-  if (!usuarioInput.value) {
-    mostrarMensaje("Selecciona el usuario.", "warning");
-    return;
-  }
-
-  const registros = obtenerRegistros();
-
-  if (!registros.length) {
-    mostrarMensaje("Introduce al menos un producto.", "warning");
-    return;
-  }
-
-  const boton = document.querySelector(".btn-primary");
-  boton.disabled = true;
-  boton.textContent = "GUARDANDO...";
-
-  try {
-    const respuesta = await fetch(API + "/registros?on_conflict=fecha,usuario_id,producto_id", {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Prefer": "resolution=merge-duplicates,return=representation"
-      },
-      body: JSON.stringify(registros)
-    });
-
-    const cuerpo = await respuesta.text();
-
-    if (!respuesta.ok) {
-      throw new Error("HTTP " + respuesta.status + ": " + (cuerpo || "Error desconocido"));
-    }
-
-    let filasGuardadas = [];
-    try { filasGuardadas = cuerpo ? JSON.parse(cuerpo) : []; } catch (_) {}
-
-    if (!Array.isArray(filasGuardadas) || filasGuardadas.length === 0) {
-      throw new Error("Supabase respondió sin confirmar ninguna fila guardada.");
-    }
-
-    mostrarMensaje(
-      "✓ Supabase confirmó el guardado de " + filasGuardadas.length + " producto" + (filasGuardadas.length === 1 ? "" : "s") + ".",
-      "success"
-    );
-
-    await cargarControlExistente();
-    await mostrarHistorial();
-    await actualizarDashboard();
-
-  } catch (error) {
-    console.error(error);
-    mostrarMensaje(
-      "No se pudo guardar: " + error.message,
-      "warning"
-    );
-  } finally {
-    boton.disabled = false;
-    boton.textContent = "GUARDAR CONTROL";
-  }
-}
-
-function mostrarMensaje(texto, tipo) {
-  const m = document.getElementById("mensaje");
-  m.textContent = texto;
-  m.className = "message " + tipo;
-  m.style.display = "block";
-}
-
-function limpiarFormulario() {
-  if (!confirm("¿Quieres borrar lo introducido en este formulario?")) return;
-
-  document
-    .querySelectorAll('input[type="number"]')
-    .forEach(i => i.value = "");
-
-  actualizarProgreso();
-  actualizarCalculos();
-  document.getElementById("mensaje").style.display = "none";
-}
-
-async function mostrarHistorial() {
-  const h = document.getElementById("historial");
-
-  try {
-    const registros = await supabaseGet(
-      "/registros?select=fecha,usuario_id&order=creado_en.desc&limit=200"
-    );
-
-    const nombres = Object.fromEntries(
-      USUARIOS.map(u => [u.id, u.nombre])
-    );
-
-    const grupos = {};
-
-    registros.forEach(r => {
-      const nombre = nombres[r.usuario_id] || "Usuario";
-      const k = r.fecha + " · " + nombre;
-      grupos[k] = (grupos[k] || 0) + 1;
-    });
-
-    const keys = Object.keys(grupos).slice(0, 10);
-
-    h.innerHTML = keys.length
-      ? keys.map(k =>
-          `<div class="history-row">
-             <strong>${escapeHtml(k)}</strong><br>
-             <span class="muted">${grupos[k]} productos registrados</span>
-           </div>`
-        ).join("")
-      : '<div class="muted">No hay controles guardados todavía.</div>';
-
-  } catch (error) {
-    console.error(error);
-    h.innerHTML =
-      '<div class="muted">No se ha podido cargar el historial.</div>';
-  }
-}
-
-async function actualizarDashboard() {
-  const fecha = fechaInput.value;
-  if (!fecha) return;
-
-  try {
-    const dashboardUsuario = dashboardUsuarioInput.value;
-    let desde = desdeDashboardInput.value;
-    let hasta = hastaDashboardInput.value;
-
-    if (!desde || !hasta) {
-      const rango = obtenerRangoDashboard();
-      desde = rango.desde;
-      hasta = rango.hasta;
-      desdeDashboardInput.value = desde;
-      hastaDashboardInput.value = hasta;
-    }
-
-    if (desde > hasta) {
-      throw new Error("La fecha desde no puede ser posterior a la fecha hasta.");
-    }
-
-    const fecha = fechaInput.value;
-    let ruta = "/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=gte." + encodeURIComponent(desde) + "&fecha=lte." + encodeURIComponent(hasta);
-    if (dashboardUsuario) {
-      ruta += "&usuario_id=eq." + encodeURIComponent(dashboardUsuario);
-    }
-    const registros = await supabaseGet(ruta);
-
-    const nombreUsuarios = Object.fromEntries(USUARIOS.map(u => [String(u.id), u.nombre]));
-    const nombreProductos = Object.fromEntries(PRODUCTOS.map(p => [String(p.id), p.nombre]));
-
-    const calcularFila = r => {
-      const inicial = Number(r.inicial) || 0;
-      const reposicion = Number(r.reposicion) || 0;
-      const sobrante = Number(r.sobrante) || 0;
-      const merma = Number(r.merma) || 0;
-      const base = inicial + reposicion;
-      return {
-        inicial,
-        reposicion,
-        sobrante,
-        merma,
-        consumo: base - sobrante,
-        base,
-        mermaPct: base > 0 ? (merma / base) * 100 : 0
-      };
-    };
-
-    const totales = registros.reduce((acc, r) => {
-      const x = calcularFila(r);
-      acc.inicial += x.inicial;
-      acc.reposicion += x.reposicion;
-      acc.sobrante += x.sobrante;
-      acc.merma += x.merma;
-      acc.consumo += x.consumo;
-      acc.base += x.base;
-      return acc;
-    }, {inicial:0,reposicion:0,sobrante:0,merma:0,consumo:0,base:0});
-
-    const mermaPct = totales.base > 0 ? (totales.merma / totales.base) * 100 : 0;
-    const trabajadores = new Set(registros.map(r => String(r.usuario_id))).size;
-
-    document.getElementById('dashProductos').textContent = registros.length;
-    document.getElementById('dashControles').textContent = trabajadores + (trabajadores === 1 ? ' trabajador' : ' trabajadores');
-    document.getElementById('dashInicial').textContent = totales.inicial;
-    document.getElementById('dashReposicion').textContent = totales.reposicion;
-    document.getElementById('dashSobrante').textContent = totales.sobrante;
-    document.getElementById('dashConsumo').textContent = totales.consumo;
-    document.getElementById('dashMerma').textContent = totales.merma;
-    document.getElementById('dashMermaPct').textContent = mermaPct.toFixed(2).replace('.', ',') + '%';
-    document.getElementById('dashTrabajadores').textContent = trabajadores;
-
-    // Comparativa por trabajador.
-    const porTrabajador = {};
-    registros.forEach(r => {
-      const id = String(r.usuario_id);
-      if (!porTrabajador[id]) {
-        porTrabajador[id] = {
-          nombre: nombreUsuarios[id] || 'Usuario',
-          productos: 0,
-          consumo: 0,
-          merma: 0,
-          base: 0,
-          reposicion: 0,
-          sobrante: 0
-        };
-      }
-      const x = calcularFila(r);
-      const t = porTrabajador[id];
-      t.productos += 1;
-      t.consumo += x.consumo;
-      t.merma += x.merma;
-      t.base += x.base;
-      t.reposicion += x.reposicion;
-      t.sobrante += x.sobrante;
-    });
-
-    const trabajadoresRows = Object.values(porTrabajador)
-      .sort((a,b) => b.merma - a.merma || b.consumo - a.consumo)
-      .map(t => {
-        const pct = t.base > 0 ? (t.merma / t.base) * 100 : 0;
-        const bar = mermaPct > 0 ? Math.min(100, (pct / mermaPct) * 100) : 0;
-        return `<tr>
-          <td><strong>${escapeHtml(t.nombre)}</strong></td>
-          <td>${t.productos}</td>
-          <td>${t.consumo}</td>
-          <td>${t.merma}</td>
-          <td>${pct.toFixed(2).replace('.', ',')}%</td>
-          <td><div class="bar-wrap"><div class="bar" style="width:${bar}%"></div></div></td>
-        </tr>`;
-      }).join('');
-
-    // Comparativa por producto: suma de todos los trabajadores para cada producto.
-    const porProducto = {};
-    registros.forEach(r => {
-      const id = String(r.producto_id);
-      if (!porProducto[id]) {
-        porProducto[id] = {
-          nombre: nombreProductos[id] || 'Producto',
-          registros: 0,
-          consumo: 0,
-          merma: 0,
-          base: 0
-        };
-      }
-      const x = calcularFila(r);
-      const p = porProducto[id];
-      p.registros += 1;
-      p.consumo += x.consumo;
-      p.merma += x.merma;
-      p.base += x.base;
-    });
-
-    const maxMerma = Math.max(0, ...Object.values(porProducto).map(p => p.merma));
-    const productoRows = Object.values(porProducto)
-      .sort((a,b) => b.merma - a.merma || b.consumo - a.consumo)
-      .map(p => {
-        const pct = p.base > 0 ? (p.merma / p.base) * 100 : 0;
-        const bar = maxMerma > 0 ? (p.merma / maxMerma) * 100 : 0;
-        return `<tr>
-          <td><strong>${escapeHtml(p.nombre)}</strong></td>
-          <td>${p.registros}</td>
-          <td>${p.consumo}</td>
-          <td>${p.merma}</td>
-          <td>${pct.toFixed(2).replace('.', ',')}%</td>
-          <td><div class="bar-wrap"><div class="bar" style="width:${bar}%"></div></div></td>
-        </tr>`;
-      }).join('');
-
-    document.getElementById('dashboardComparativas').innerHTML = registros.length ? `
-      <div class="comparison-card">
-        <div class="comparison-title">Comparativa por trabajador</div>
-        <div class="comparison-note">Consumo y merma acumulados del ${escapeHtml(formatearFecha(desde))} al ${escapeHtml(formatearFecha(hasta))}.</div>
-        <table class="comparison-table">
-          <thead><tr><th>Trabajador</th><th>Prod.</th><th>Consumo</th><th>Merma</th><th>% Merma</th><th></th></tr></thead>
-          <tbody>${trabajadoresRows}</tbody>
-        </table>
-      </div>
-      <div class="comparison-card">
-        <div class="comparison-title">Comparativa por producto</div>
-        <div class="comparison-note">Periodo ${escapeHtml(formatearFecha(desde))} → ${escapeHtml(formatearFecha(hasta))}. Ordenada de mayor a menor merma acumulada.</div>
-        <table class="comparison-table">
-          <thead><tr><th>Producto</th><th>Reg.</th><th>Consumo</th><th>Merma</th><th>% Merma</th><th></th></tr></thead>
-          <tbody>${productoRows}</tbody>
-        </table>
-      </div>` : `
-      <div class="comparison-card">
-        <div class="muted">No hay datos para comparar en esta fecha.</div>
-      </div>`;
-
-    const detalle = {};
-    registros.forEach(r => {
-      const id = String(r.producto_id);
-      if (!detalle[id]) detalle[id] = {producto:nombreProductos[id] || 'Producto', consumo:0, merma:0, base:0};
-      const x = calcularFila(r);
-      detalle[id].consumo += x.consumo;
-      detalle[id].merma += x.merma;
-      detalle[id].base += x.base;
-    });
-
-    const filas = Object.values(detalle)
-      .sort((a,b) => (b.consumo + b.merma) - (a.consumo + a.merma))
-      .map(x => {
-        const pct = x.base > 0 ? (x.merma / x.base) * 100 : 0;
-        return `<tr><td>${escapeHtml(x.producto)}</td><td>${x.consumo}</td><td>${x.merma}</td><td>${pct.toFixed(2).replace('.', ',')}%</td></tr>`;
-      }).join('');
-
-    document.getElementById('dashboardDetalle').innerHTML = registros.length ?
-      `<div class="comparison-card" style="margin-top:12px">
-        <div class="comparison-title">Detalle por producto</div>
-        <table class="dashboard-table"><thead><tr><th>Producto</th><th>Consumo</th><th>Merma</th><th>% Merma</th></tr></thead><tbody>${filas}</tbody></table>
-      </div>` :
-      '<div class="muted" style="margin-top:12px">No hay registros guardados para esta fecha.</div>';
-  } catch (error) {
-    console.error(error);
-    document.getElementById('dashboardComparativas').innerHTML = '<div class="comparison-card"><div class="muted">No se pudieron cargar las comparativas.</div></div>';
-    document.getElementById('dashboardDetalle').innerHTML = '<div class="muted" style="margin-top:12px">No se pudo cargar el dashboard.</div>';
-  }
-}
-
-async function exportarCSV() {
-  try {
-    const registros = await supabaseGet(
-      "/registros?select=fecha,hora,usuario_id,producto_id,inicial,reposicion,sobrante,merma,observaciones&order=fecha.asc,hora.asc"
-    );
-
-    if (!registros.length) {
-      alert("No hay registros para exportar.");
-      return;
-    }
-
-    const usuarios = Object.fromEntries(
-      USUARIOS.map(u => [u.id, u.nombre])
-    );
-
-    const productos = Object.fromEntries(
-      PRODUCTOS.map(p => [p.id, p.nombre])
-    );
-
-    const columnas = [
-      "fecha","hora","usuario","producto",
-      "inicial","reposicion","sobrante","merma",
-      "consumo","mermaPorcentaje","observaciones"
-    ];
-
-    const filas = registros.map(r => {
-      const base = r.inicial + r.reposicion;
-      const consumo = base - r.sobrante;
-      const mermaPorcentaje = base > 0 ? r.merma / base : 0;
-
-      return [
-        r.fecha,
-        r.hora || "",
-        usuarios[r.usuario_id] || "",
-        productos[r.producto_id] || "",
-        r.inicial,
-        r.reposicion,
-        r.sobrante,
-        r.merma,
-        consumo,
-        mermaPorcentaje,
-        r.observaciones || ""
-      ];
-    });
-
-    const csv = [
-      columnas.join(";"),
-      ...filas.map(f =>
-        f.map(v =>
-          String(v ?? "")
-            .replaceAll(";", ",")
-            .replaceAll("\n", " ")
-        ).join(";")
-      )
-    ].join("\n");
-
-    const blob = new Blob(["\ufeff" + csv], {
-      type: "text/csv;charset=utf-8;"
-    });
-
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "control_diario.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
-
-  } catch (error) {
-    console.error(error);
-    alert("No se ha podido exportar el CSV.");
-  }
-}
-
+function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
+function limpiarFormulario(){if(!confirm("¿Quieres borrar lo introducido en este formulario?"))return;document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
 cargarDatosIniciales();
 </script>
 </body>
