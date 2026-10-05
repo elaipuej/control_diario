@@ -148,7 +148,15 @@ function actualizarProgreso(){
   const pct=Math.round((n/(PRODUCTOS.length||1))*100); document.getElementById("progress").style.width=pct+"%";document.getElementById("progressText").textContent=`${n} / ${PRODUCTOS.length} productos`;document.getElementById("progressPercent").textContent=pct+"%";
 }
 
-document.addEventListener("input",()=>{actualizarProgreso();actualizarCalculos();});
+let autoSaveTimer=null;
+document.addEventListener("input",()=>{
+  actualizarProgreso();
+  actualizarCalculos();
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{
+    if(fechaInput.value&&usuarioInput.value) guardarControl();
+  },700);
+});
 fechaInput.addEventListener("change",cargarControlExistente);
 usuarioInput.addEventListener("change",cargarControlExistente);
 
