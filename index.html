@@ -41,6 +41,7 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 .calc-box{background:#f7fafc;border:1px solid #e5edf3;border-radius:9px;padding:8px;text-align:center}
 .calc-title{font-size:9px;color:#657786;font-weight:bold;text-transform:uppercase}
 .calc-value{font-weight:bold;font-size:13px;margin-top:3px}
+.estimate-box{margin-top:8px;padding:10px;border-radius:9px;background:#eef6ff;border:1px solid #d7e8fa}.estimate-heading{font-size:10px;font-weight:bold;color:#355f88;text-transform:uppercase}.estimate-value{font-size:17px;font-weight:bold;color:#173F5F;margin-top:4px}.estimate-note{font-size:11px;color:#657786;margin-top:3px;line-height:1.4}
 @media(max-width:480px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}.dashboard-table{font-size:11px}.dashboard-table th,.dashboard-table td{padding:7px 4px}}
 
 .comparison-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
@@ -126,6 +127,8 @@ let seleccionPendiente = new Set();
 let fechaSeleccionCargada = null;
 let autoSaveTimer = null;
 let aplicandoCambios = false;
+let historicoEstimacion = [];
+let estimacionRequestId = 0;
 const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
 const productosContainer = document.getElementById("productos");
@@ -161,7 +164,7 @@ async function cargarDatosIniciales(){
     usuarioInput.innerHTML='<option value="">Seleccionar usuario...</option>'+USUARIOS.map(u=>`<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
     await cargarSeleccionParaFecha(fechaInput.value);
     renderizarSelector();
-    crearProductos(); actualizarProgreso(); actualizarCalculos();
+    crearProductos(); actualizarProgreso(); actualizarCalculos(); await cargarHistoricoEstimacion();
   }catch(error){console.error(error);mostrarMensaje("No se ha podido conectar con la base de datos: "+error.message,"warning");}
 }
 
@@ -223,9 +226,70 @@ function crearProductos(){
       <div class="calc-row">
         <div class="calc-box"><div class="calc-title">Consumo</div><div class="calc-value" data-calculo="consumo" data-producto="${p.id}">0</div></div>
         <div class="calc-box"><div class="calc-title">% Merma</div><div class="calc-value" data-calculo="mermaPct" data-producto="${p.id}">0,00%</div></div>
+      </div>
+      <div class="estimate-box">
+        <div class="estimate-heading">Estimación para este día de la semana</div>
+        <div class="estimate-value" data-estimacion="${p.id}">Calculando…</div>
+        <div class="estimate-note" data-estimacion-nota="${p.id}">Se basa en consumos históricos del mismo día de la semana.</div>
       </div>`;
     productosContainer.appendChild(b);
   });
+}
+
+function restarDiasISO(fechaISO, dias){
+  const d = new Date(`${fechaISO}T12:00:00`);
+  d.setDate(d.getDate()-dias);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function formatearNumero(n){
+  return Number(n).toLocaleString("es-ES",{maximumFractionDigits:1,minimumFractionDigits:0});
+}
+function calcularEstimacionProducto(productoId){
+  const valor=document.querySelector(`[data-estimacion="${productoId}"]`);
+  const nota=document.querySelector(`[data-estimacion-nota="${productoId}"]`);
+  if(!valor||!nota)return;
+  if(!fechaInput.value){valor.textContent="Sin fecha";nota.textContent="Selecciona una fecha para calcular la estimación.";return;}
+  const diaObjetivo=new Date(`${fechaInput.value}T12:00:00`).getDay();
+  const porFecha=new Map();
+  historicoEstimacion.forEach(r=>{
+    if(String(r.producto_id)!==String(productoId)||!r.fecha||r.fecha>=fechaInput.value)return;
+    const d=new Date(`${r.fecha}T12:00:00`);
+    if(d.getDay()!==diaObjetivo)return;
+    const base=(Number(r.inicial)||0)+(Number(r.reposicion)||0);
+    const consumo=base-(Number(r.sobrante)||0);
+    if(!porFecha.has(r.fecha))porFecha.set(r.fecha,consumo);
+  });
+  const observaciones=[...porFecha.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-4);
+  if(observaciones.length<2){
+    valor.textContent="Aún sin estimación";
+    nota.textContent=observaciones.length===1?"Solo hay 1 registro anterior de este mismo día. Se necesitan al menos 2 para estimar.":"Todavía no hay suficientes registros anteriores de este mismo día.";
+    return;
+  }
+  let sumaPonderada=0,sumaPesos=0;
+  observaciones.forEach((obs,i)=>{const peso=i+1;sumaPonderada+=obs[1]*peso;sumaPesos+=peso;});
+  const estimacion=sumaPonderada/sumaPesos;
+  valor.textContent=`${formatearNumero(Math.round(estimacion))} unidades`;
+  const detalle=observaciones.map(o=>`${o[0]}: ${formatearNumero(o[1])}`).join(" · ");
+  nota.textContent=`Estimación ponderada de ${observaciones.length} registros del mismo día; los recientes pesan más. Histórico: ${detalle}.${observaciones.length<4?" Estimación provisional: aún hay menos de 4 observaciones.":""}`;
+}
+function actualizarEstimaciones(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularEstimacionProducto(p.id));}
+async function cargarHistoricoEstimacion(){
+  const requestId=++estimacionRequestId;historicoEstimacion=[];actualizarEstimaciones();
+  if(!fechaInput.value)return;
+  try{
+    const desde=restarDiasISO(fechaInput.value,120);
+    let path=`/registros?select=fecha,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${encodeURIComponent(desde)}&fecha=lt.${encodeURIComponent(fechaInput.value)}&order=fecha.desc&limit=5000`;
+    if(usuarioInput.value)path+=`&usuario_id=eq.${encodeURIComponent(usuarioInput.value)}`;
+    const rows=await supabaseGet(path);if(requestId!==estimacionRequestId)return;
+    historicoEstimacion=Array.isArray(rows)?rows:[];actualizarEstimaciones();
+  }catch(error){
+    console.error("No se pudo cargar el histórico para estimaciones:",error);
+    if(requestId===estimacionRequestId)PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{
+      const valor=document.querySelector(`[data-estimacion="${p.id}"]`),nota=document.querySelector(`[data-estimacion-nota="${p.id}"]`);
+      if(valor)valor.textContent="No disponible";
+      if(nota)nota.textContent="No se pudo consultar el histórico. Los registros guardados no se han modificado.";
+    });
+  }
 }
 
 function calcularProducto(id){
@@ -236,7 +300,7 @@ function calcularProducto(id){
   const me=document.querySelector(`[data-calculo="mermaPct"][data-producto="${id}"]`);
   if(ce)ce.textContent=String(consumo); if(me)me.textContent=pct.toFixed(2).replace('.',',')+'%';
 }
-function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));}
+function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));actualizarEstimaciones();}
 function actualizarProgreso(){
   const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));let n=0;
   lista.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
@@ -281,7 +345,7 @@ async function aplicarSeleccion(){
     if(fechaInput.value&&usuarioInput.value){const actuales=obtenerRegistros();if(actuales.length)await guardarRegistros(actuales,false);}
     productosSeleccionados=new Set(seleccionPendiente);
     await guardarSeleccion(fechaInput.value);
-    crearProductos();renderizarSelector();
+    crearProductos();renderizarSelector();actualizarEstimaciones();
     productosControlToggle.setAttribute("aria-expanded","true");productosControlPanel.hidden=false;
     if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();}
     mostrarMensaje(`Selección guardada: ${productosSeleccionados.size} productos para ${fechaInput.value}. No se ha eliminado ningún registro.`,"success");
@@ -310,11 +374,11 @@ async function guardarControl(){
 
 async function cambiarFecha(){
   clearTimeout(autoSaveTimer);
-  try{await cargarSeleccionParaFecha(fechaInput.value);renderizarSelector();crearProductos();productosControlToggle.setAttribute("aria-expanded","false");productosControlPanel.hidden=true;if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}}
+  try{await cargarSeleccionParaFecha(fechaInput.value);renderizarSelector();crearProductos();productosControlToggle.setAttribute("aria-expanded","false");productosControlPanel.hidden=true;if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}await cargarHistoricoEstimacion();}
   catch(e){console.error(e);mostrarMensaje("No se pudo cargar la selección de esta fecha. Comprueba que la tabla selecciones_productos existe en Supabase. "+e.message,"warning");}
 }
 fechaInput.addEventListener("change",cambiarFecha);
-usuarioInput.addEventListener("change",cargarControlExistente);
+usuarioInput.addEventListener("change",async()=>{await cargarControlExistente();await cargarHistoricoEstimacion();});
 function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
 function limpiarFormulario(){if(!confirm("¿Quieres limpiar los campos visibles? Esto solo limpia el formulario y no borra datos de la base de datos."))return;clearTimeout(autoSaveTimer);productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
 cargarDatosIniciales();
