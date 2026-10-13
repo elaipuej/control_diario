@@ -21,6 +21,10 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 .field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}.fields input{padding:9px 5px}
 .message{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}.success{background:#e8f7ef;color:#19724a}.warning{background:#fff4df;color:#8a5a00}
 .history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:13px}.muted{color:#657786;font-size:12px}
+.selector-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;background:#fff;color:#173F5F;text-align:left;padding:0;border:0;font-weight:bold;font-size:15px}
+.selector-toggle .chevron{transition:transform .2s;font-size:18px}.selector-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg)}
+.selector-panel{margin-top:14px}.selector-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.selector-toolbar button,.selector-apply{padding:10px;font-size:13px}.selector-search{margin-top:10px}.selector-list{max-height:330px;overflow:auto;border:1px solid #e2e9ee;border-radius:10px;margin-top:10px;padding:6px}
+.selector-item{display:flex;align-items:center;gap:10px;padding:9px 7px;border-bottom:1px solid #edf1f4;font-size:13px}.selector-item:last-child{border-bottom:0}.selector-item input{width:18px;height:18px;flex:0 0 auto;margin:0}.selector-item span{flex:1}.selector-count{font-size:12px;color:#657786;margin-top:8px}.selector-panel[hidden]{display:none!important}
 @media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
 
 .dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px}
@@ -75,7 +79,28 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
 <div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
 </section>
 
-<section class="card"><div class="section-title">Productos</div><div id="productos"></div></section>
+<section class="card" id="selectorCard">
+  <button type="button" class="selector-toggle" id="selectorToggle" aria-expanded="false" aria-controls="selectorPanel">
+    <span>Seleccionar productos del día</span><span class="chevron" aria-hidden="true">⌄</span>
+  </button>
+  <div id="selectorPanel" class="selector-panel" hidden>
+    <div class="muted">Marca únicamente los productos existentes que necesitas registrar para esta fecha.</div>
+    <input class="selector-search" id="selectorSearch" type="search" placeholder="Buscar producto..." aria-label="Buscar producto">
+    <div class="selector-toolbar">
+      <button type="button" class="btn-secondary" id="seleccionarTodos">Seleccionar todos</button>
+      <button type="button" class="btn-secondary" id="desmarcarTodos">Desmarcar todos</button>
+    </div>
+    <div id="selectorLista" class="selector-list"></div>
+    <div id="selectorCount" class="selector-count">0 productos seleccionados</div>
+    <button type="button" class="btn-primary selector-apply" id="aplicarSeleccion" style="margin-top:10px">APLICAR SELECCIÓN</button>
+  </div>
+</section>
+<section class="card" id="productosControlCard">
+  <button type="button" class="selector-toggle" id="productosControlToggle" aria-expanded="false" aria-controls="productosControlPanel">
+    <span id="productosControlTitulo">Productos del control</span><span class="chevron" aria-hidden="true">⌄</span>
+  </button>
+  <div id="productosControlPanel" class="selector-panel" hidden><div id="productos"></div></div>
+</section>
 <section class="card">
 <button class="btn-primary" onclick="guardarControl()">GUARDAR CONTROL</button>
 <button class="btn-secondary" onclick="limpiarFormulario()">Limpiar formulario</button>
@@ -96,30 +121,99 @@ const headers = { "apikey": SUPABASE_KEY, "Content-Type": "application/json" };
 
 let PRODUCTOS = [];
 let USUARIOS = [];
+let productosSeleccionados = new Set();
+let seleccionPendiente = new Set();
+let fechaSeleccionCargada = null;
+let autoSaveTimer = null;
+let aplicandoCambios = false;
 const fechaInput = document.getElementById("fecha");
 const usuarioInput = document.getElementById("usuario");
 const productosContainer = document.getElementById("productos");
+const selectorToggle = document.getElementById("selectorToggle");
+const selectorPanel = document.getElementById("selectorPanel");
+const selectorLista = document.getElementById("selectorLista");
+const selectorSearch = document.getElementById("selectorSearch");
+const productosControlToggle = document.getElementById("productosControlToggle");
+const productosControlPanel = document.getElementById("productosControlPanel");
+const productosControlTitulo = document.getElementById("productosControlTitulo");
 
 function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 async function supabaseGet(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||(`HTTP ${r.status}`));return r.json();}
+async function supabasePost(path, body){const r=await fetch(API+path,{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(body)});const txt=await r.text();if(!r.ok)throw new Error(txt||(`HTTP ${r.status}`));try{return txt?JSON.parse(txt):[];}catch{return [];}}
 
 fechaInput.value=fechaLocalISO();
+selectorToggle.addEventListener("click",()=>{
+  const abrir=selectorToggle.getAttribute("aria-expanded")!=="true";
+  selectorToggle.setAttribute("aria-expanded",String(abrir));
+  selectorPanel.hidden=!abrir;
+});
+productosControlToggle.addEventListener("click",()=>{
+  const abrir=productosControlToggle.getAttribute("aria-expanded")!=="true";
+  productosControlToggle.setAttribute("aria-expanded",String(abrir));
+  productosControlPanel.hidden=!abrir;
+});
 
 async function cargarDatosIniciales(){
   try{
     PRODUCTOS=await supabaseGet("/productos?activo=eq.true&order=orden.asc");
     USUARIOS=await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
     usuarioInput.innerHTML='<option value="">Seleccionar usuario...</option>'+USUARIOS.map(u=>`<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
-    crearProductos(); actualizarProgreso(); actualizarCalculos(); await cargarControlExistente();
+    await cargarSeleccionParaFecha(fechaInput.value);
+    renderizarSelector();
+    crearProductos(); actualizarProgreso(); actualizarCalculos();
   }catch(error){console.error(error);mostrarMensaje("No se ha podido conectar con la base de datos: "+error.message,"warning");}
+}
+
+function renderizarSelector(){
+  const filtro=(selectorSearch.value||"").trim().toLocaleLowerCase("es");
+  selectorLista.innerHTML="";
+  PRODUCTOS.filter(p=>String(p.nombre).toLocaleLowerCase("es").includes(filtro)).forEach(p=>{
+    const label=document.createElement("label");label.className="selector-item";
+    const check=document.createElement("input");check.type="checkbox";check.checked=seleccionPendiente.has(String(p.id));check.dataset.selectorProducto=String(p.id);
+    check.addEventListener("change",()=>{if(check.checked)seleccionPendiente.add(String(p.id));else seleccionPendiente.delete(String(p.id));actualizarContadorSelector();});
+    const name=document.createElement("span");name.textContent=p.nombre;
+    label.append(check,name);selectorLista.appendChild(label);
+  });
+  actualizarContadorSelector();
+}
+function actualizarContadorSelector(){document.getElementById("selectorCount").textContent=`${seleccionPendiente.size} de ${PRODUCTOS.length} productos seleccionados`;}
+selectorSearch.addEventListener("input",renderizarSelector);
+document.getElementById("seleccionarTodos").addEventListener("click",()=>{PRODUCTOS.forEach(p=>seleccionPendiente.add(String(p.id)));renderizarSelector();});
+document.getElementById("desmarcarTodos").addEventListener("click",()=>{seleccionPendiente.clear();renderizarSelector();});
+
+async function cargarSeleccionParaFecha(fecha){
+  if(!fecha||!PRODUCTOS.length)return;
+  let rows=await supabaseGet(`/selecciones_productos?select=fecha,productos_ids&fecha=eq.${encodeURIComponent(fecha)}&limit=1`);
+  if(rows.length){productosSeleccionados=new Set((Array.isArray(rows[0].productos_ids)?rows[0].productos_ids:[]).map(String));}
+  else {
+    // Para una fecha nueva, copiar la selección guardada más reciente anterior.
+    const anteriores=await supabaseGet(`/selecciones_productos?select=fecha,productos_ids&fecha=lt.${encodeURIComponent(fecha)}&order=fecha.desc&limit=1`);
+    if(anteriores.length){productosSeleccionados=new Set((Array.isArray(anteriores[0].productos_ids)?anteriores[0].productos_ids:[]).map(String));}
+    else {productosSeleccionados=new Set(PRODUCTOS.map(p=>String(p.id)));}
+  }
+  // No se admiten IDs que ya no estén en el catálogo activo; no se modifica la tabla productos.
+  const idsActivos=new Set(PRODUCTOS.map(p=>String(p.id)));
+  productosSeleccionados=new Set([...productosSeleccionados].filter(id=>idsActivos.has(id)));
+  seleccionPendiente=new Set(productosSeleccionados);
+  fechaSeleccionCargada=fecha;
+}
+async function guardarSeleccion(fecha){
+  if(!fecha)throw new Error("Selecciona una fecha.");
+  const payload={fecha,productos_ids:PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).map(p=>p.id),updated_at:new Date().toISOString()};
+  await supabasePost("/selecciones_productos?on_conflict=fecha",payload);
+  fechaSeleccionCargada=fecha;
 }
 
 function crearProductos(){
   productosContainer.innerHTML="";
-  PRODUCTOS.forEach((p,i)=>{
-    const b=document.createElement("div"); b.className="product";
-    b.innerHTML=`<div class="product-name">${i+1}. ${escapeHtml(p.nombre)}</div>
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+  productosControlTitulo.textContent=`Productos del control (${lista.length})`;
+  if(!lista.length){productosContainer.innerHTML='<div class="muted">No hay productos seleccionados para esta fecha. Abre “Seleccionar productos del día” para elegirlos.</div>';return;}
+  lista.forEach((p)=>{
+    const numero=PRODUCTOS.findIndex(x=>String(x.id)===String(p.id))+1;
+    const b=document.createElement("div"); b.className="product";b.dataset.productCard=String(p.id);
+    b.innerHTML=`<div class="product-name">${numero}. ${escapeHtml(p.nombre)}</div>
       <div class="fields">
         <div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="inicial" inputmode="numeric"></div>
         <div><div class="field-title">REPOSICIÓN</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="reposicion" inputmode="numeric"></div>
@@ -142,62 +236,87 @@ function calcularProducto(id){
   const me=document.querySelector(`[data-calculo="mermaPct"][data-producto="${id}"]`);
   if(ce)ce.textContent=String(consumo); if(me)me.textContent=pct.toFixed(2).replace('.',',')+'%';
 }
-function actualizarCalculos(){PRODUCTOS.forEach(p=>calcularProducto(p.id));}
+function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));}
 function actualizarProgreso(){
-  let n=0; PRODUCTOS.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
-  const pct=Math.round((n/(PRODUCTOS.length||1))*100); document.getElementById("progress").style.width=pct+"%";document.getElementById("progressText").textContent=`${n} / ${PRODUCTOS.length} productos`;document.getElementById("progressPercent").textContent=pct+"%";
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));let n=0;
+  lista.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
+  const pct=Math.round((n/(lista.length||1))*100);document.getElementById("progress").style.width=(lista.length?pct:0)+"%";document.getElementById("progressText").textContent=`${n} / ${lista.length} productos`;document.getElementById("progressPercent").textContent=(lista.length?pct:0)+"%";
 }
 
-let autoSaveTimer=null;
-document.addEventListener("input",()=>{
-  actualizarProgreso();
-  actualizarCalculos();
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>{
-    if(fechaInput.value&&usuarioInput.value) guardarControl();
-  },700);
+document.addEventListener("input",(e)=>{
+  if(e.target.matches('input[type="number"][data-producto]')){
+    actualizarProgreso();actualizarCalculos();clearTimeout(autoSaveTimer);
+    autoSaveTimer=setTimeout(()=>{if(fechaInput.value&&usuarioInput.value)guardarControl();},700);
+  }
 });
-fechaInput.addEventListener("change",cargarControlExistente);
-usuarioInput.addEventListener("change",cargarControlExistente);
 
 function obtenerRegistros(){
-  const fecha=fechaInput.value, usuarioId=Number(usuarioInput.value), out=[];
-  PRODUCTOS.forEach(p=>{
+  const fecha=fechaInput.value,usuarioId=Number(usuarioInput.value),out=[];
+  PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{
     const get=c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el?el.value:"";};
-    const inicial=get("inicial"), reposicion=get("reposicion"), sobrante=get("sobrante"), merma=get("merma");
-    if([inicial,reposicion,sobrante,merma].some(v=>v!=="")) out.push({fecha,usuario_id:usuarioId,producto_id:p.id,inicial:Number(inicial)||0,reposicion:Number(reposicion)||0,sobrante:Number(sobrante)||0,merma:Number(merma)||0});
-  }); return out;
+    const inicial=get("inicial"),reposicion=get("reposicion"),sobrante=get("sobrante"),merma=get("merma");
+    if([inicial,reposicion,sobrante,merma].some(v=>v!==""))out.push({fecha,usuario_id:usuarioId,producto_id:p.id,inicial:Number(inicial)||0,reposicion:Number(reposicion)||0,sobrante:Number(sobrante)||0,merma:Number(merma)||0});
+  });return out;
 }
 
 async function cargarControlExistente(){
   if(!fechaInput.value||!usuarioInput.value||!PRODUCTOS.length)return;
   try{
     const rows=await supabaseGet(`/registros?select=producto_id,inicial,reposicion,sobrante,merma&fecha=eq.${encodeURIComponent(fechaInput.value)}&usuario_id=eq.${encodeURIComponent(usuarioInput.value)}`);
-    document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
+    // Limpiar únicamente los campos visibles. No se elimina ni modifica ningún dato en la BD.
+    productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
     const map=Object.fromEntries(rows.map(r=>[String(r.producto_id),r]));
-    PRODUCTOS.forEach(p=>{const r=map[String(p.id)];if(!r)return;["inicial","reposicion","sobrante","merma"].forEach(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);if(el)el.value=r[c]??0;});});
+    PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{const r=map[String(p.id)];if(!r)return;["inicial","reposicion","sobrante","merma"].forEach(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);if(el)el.value=r[c]??0;});});
     actualizarProgreso();actualizarCalculos();
-    if(rows.length)mostrarMensaje(`Se han cargado ${rows.length} productos registrados para esta fecha y usuario.` ,"success");
+    if(rows.length)mostrarMensaje(`Se han cargado ${rows.length} productos registrados para esta fecha y usuario. Los registros de productos no seleccionados se conservan.`,"success");
     else document.getElementById("mensaje").style.display="none";
   }catch(e){console.error(e);mostrarMensaje("No se pudo cargar el control existente: "+e.message,"warning");}
 }
 
+async function aplicarSeleccion(){
+  if(aplicandoCambios)return;aplicandoCambios=true;clearTimeout(autoSaveTimer);
+  const boton=document.getElementById("aplicarSeleccion");boton.disabled=true;boton.textContent="APLICANDO...";
+  try{
+    // Guardar los valores visibles actuales antes de cambiar la lista, sin borrar nada.
+    if(fechaInput.value&&usuarioInput.value){const actuales=obtenerRegistros();if(actuales.length)await guardarRegistros(actuales,false);}
+    productosSeleccionados=new Set(seleccionPendiente);
+    await guardarSeleccion(fechaInput.value);
+    crearProductos();renderizarSelector();
+    productosControlToggle.setAttribute("aria-expanded","true");productosControlPanel.hidden=false;
+    if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();}
+    mostrarMensaje(`Selección guardada: ${productosSeleccionados.size} productos para ${fechaInput.value}. No se ha eliminado ningún registro.`,"success");
+  }catch(e){console.error(e);mostrarMensaje("No se pudo aplicar la selección: "+e.message,"warning");}
+  finally{aplicandoCambios=false;boton.disabled=false;boton.textContent="APLICAR SELECCIÓN";}
+}
+document.getElementById("aplicarSeleccion").addEventListener("click",aplicarSeleccion);
+
+async function guardarRegistros(registros,mostrar=true){
+  if(!registros.length){if(mostrar)mostrarMensaje("Introduce al menos un producto.","warning");return false;}
+  const r=await fetch(API+"/registros?on_conflict=fecha,usuario_id,producto_id",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(registros)});
+  const body=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${body||"Error desconocido"}`);
+  let rows=[];try{rows=body?JSON.parse(body):[]}catch{}
+  if(!Array.isArray(rows)||rows.length===0)throw new Error("Supabase no confirmó ninguna fila.");
+  if(mostrar)mostrarMensaje(`✓ Guardado correctamente: ${rows.length} producto${rows.length===1?"":"s"}.`,"success");return true;
+}
 async function guardarControl(){
   if(!fechaInput.value){mostrarMensaje("Selecciona una fecha.","warning");return;}
   if(!usuarioInput.value){mostrarMensaje("Selecciona el usuario.","warning");return;}
-  const registros=obtenerRegistros(); if(!registros.length){mostrarMensaje("Introduce al menos un producto.","warning");return;}
-  const boton=document.querySelector(".btn-primary");boton.disabled=true;boton.textContent="GUARDANDO...";
-  try{
-    const r=await fetch(API+"/registros?on_conflict=fecha,usuario_id,producto_id",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(registros)});
-    const body=await r.text(); if(!r.ok)throw new Error(`HTTP ${r.status}: ${body||"Error desconocido"}`);
-    let rows=[];try{rows=body?JSON.parse(body):[]}catch{}
-    if(!Array.isArray(rows)||rows.length===0)throw new Error("Supabase no confirmó ninguna fila.");
-    mostrarMensaje(`✓ Guardado correctamente: ${rows.length} producto${rows.length===1?"":"s"}.`,"success");
-  }catch(e){console.error(e);mostrarMensaje("No se pudo guardar: "+e.message,"warning");}
-  finally{boton.disabled=false;boton.textContent="GUARDAR CONTROL";}
+  const registros=obtenerRegistros();if(!registros.length){mostrarMensaje("Introduce al menos un producto.","warning");return;}
+  const boton=document.querySelector(".btn-primary:not(#aplicarSeleccion)");if(boton){boton.disabled=true;boton.textContent="GUARDANDO...";}
+  try{await guardarRegistros(registros,true);}
+  catch(e){console.error(e);mostrarMensaje("No se pudo guardar: "+e.message,"warning");}
+  finally{if(boton){boton.disabled=false;boton.textContent="GUARDAR CONTROL";}}
 }
+
+async function cambiarFecha(){
+  clearTimeout(autoSaveTimer);
+  try{await cargarSeleccionParaFecha(fechaInput.value);renderizarSelector();crearProductos();productosControlToggle.setAttribute("aria-expanded","false");productosControlPanel.hidden=true;if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}}
+  catch(e){console.error(e);mostrarMensaje("No se pudo cargar la selección de esta fecha. Comprueba que la tabla selecciones_productos existe en Supabase. "+e.message,"warning");}
+}
+fechaInput.addEventListener("change",cambiarFecha);
+usuarioInput.addEventListener("change",cargarControlExistente);
 function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
-function limpiarFormulario(){if(!confirm("¿Quieres borrar lo introducido en este formulario?"))return;document.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
+function limpiarFormulario(){if(!confirm("¿Quieres limpiar los campos visibles? Esto solo limpia el formulario y no borra datos de la base de datos."))return;clearTimeout(autoSaveTimer);productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
 cargarDatosIniciales();
 </script>
 </body>
