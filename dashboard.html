@@ -58,9 +58,15 @@ select,input{border:1px solid #ccd7e0;padding:11px;background:#fff} button{borde
 </section>
 
 <section class="card">
-  <div class="section-title">🔮 Previsión para mañana</div>
-  <div class="note">Mismo criterio que el control diario: últimos 120 días, hasta 4 registros del mismo día de la semana y mayor peso para los más recientes. El sobrante anterior no se suma de nuevo porque ya está incluido en el inicial.</div>
-  <div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Preparar aprox.</th><th>Habitual</th><th>Fiabilidad</th><th>Días</th></tr></thead><tbody id="forecastRows"></tbody></table></div>
+  <div class="section-title">🥡 Sobrantes de hoy (disponibles para mañana)</div>
+  <div class="note">Muestra el sobrante registrado al cierre de hoy para cada producto. Si no hay registro para un producto, se considera 0 sobrante para el cálculo; registra el cierre para que la preparación recomendada sea más precisa.</div>
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Sobrante registrado hoy</th></tr></thead><tbody id="leftoverRows"></tbody></table></div>
+</section>
+
+<section class="card">
+  <div class="section-title">🔮 Previsión y preparación para mañana</div>
+  <div class="note">La estimación predice el consumo de mañana usando hasta 4 registros de los últimos 120 días que coincidan con el mismo día de la semana. “Preparar aprox.” resta el sobrante aprovechable registrado hoy: máximo entre 0 y estimación menos sobrante de hoy.</div>
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Estimación</th><th>Sobrante hoy</th><th>Preparar aprox.</th><th>Habitual</th><th>Fiabilidad</th><th>Días</th></tr></thead><tbody id="forecastRows"></tbody></table></div>
   <div id="forecastTotal" class="range-summary" style="margin-top:12px"></div>
 </section>
 
@@ -103,9 +109,9 @@ function renderProducts(bp){const rows=Object.values(bp).sort((a,b)=>b.consumo-a
 async function cargarPrevision(){
   try{
     const uid=$('dashboardUsuario').value;
-    // La previsión se calcula para mañana y usa el mismo criterio que
-    // calcularEstimacionProducto() del control diario: últimos 120 días,
-    // mismo día de la semana, hasta 4 fechas distintas y pesos 1..4.
+    const hoy=fechaLocalISO();
+    // La previsión se calcula para mañana; los sobrantes registrados hoy
+    // se descuentan de esa previsión para estimar cuánto preparar.
     const manana=new Date();
     manana.setDate(manana.getDate()+1);
     const fechaObjetivo=iso(manana);
@@ -114,14 +120,32 @@ async function cargarPrevision(){
     const desde=iso(desdeDate);
     let path=`/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${encodeURIComponent(desde)}&fecha=lt.${encodeURIComponent(fechaObjetivo)}&order=fecha.desc&limit=5000`;
     if(uid)path+=`&usuario_id=eq.${encodeURIComponent(uid)}`;
+    let sobrantesPath=`/registros?select=fecha,usuario_id,producto_id,sobrante&fecha=eq.${encodeURIComponent(hoy)}&order=fecha.desc&limit=2000`;
+    if(uid)sobrantesPath+=`&usuario_id=eq.${encodeURIComponent(uid)}`;
 
-    const registros=await get(path);
+    const [registros,registrosHoy]=await Promise.all([get(path),get(sobrantesPath)]);
     const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));
     const diaObjetivo=manana.getDay();
     const porProducto={};
+    const sobrantesPorProducto={};
 
-    // Igual que el formulario: un consumo por producto y fecha. El sobrante
-    // de ayer no se suma aparte, porque ya está incluido en el inicial de hoy.
+    // Un sobrante por producto para la jornada de hoy. No se vuelve a sumar
+    // al consumo histórico: el campo inicial ya incluye el sobrante anterior.
+    registrosHoy.forEach(r=>{
+      const pid=String(r.producto_id);
+      if(!prods[pid]||!r.fecha||r.fecha!==hoy)return;
+      if(!(pid in sobrantesPorProducto))sobrantesPorProducto[pid]=Math.max(0,Number(r.sobrante)||0);
+    });
+
+    $('leftoverRows').innerHTML=PRODUCTOS.length
+      ?PRODUCTOS.map(p=>{
+        const pid=String(p.id);
+        const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
+        const cantidad=registrado?sobrantesPorProducto[pid]:0;
+        return `<tr><td class="name-cell"><strong>${esc(p.nombre)}</strong></td><td>${registrado?cantidad:'Sin registro (0 descontado)'}</td></tr>`;
+      }).join('')
+      :'<tr><td colspan="2" class="note">No hay productos activos.</td></tr>';
+
     registros.forEach(r=>{
       const pid=String(r.producto_id);
       if(!prods[pid]||!r.fecha)return;
@@ -134,15 +158,16 @@ async function cargarPrevision(){
     });
 
     const rows=PRODUCTOS.map(p=>{
-      const mapa=porProducto[String(p.id)]||new Map();
+      const pid=String(p.id);
+      const mapa=porProducto[pid]||new Map();
       const observaciones=[...mapa.entries()]
         .sort((a,b)=>a[0].localeCompare(b[0]))
         .slice(-4);
-      if(observaciones.length<2)return {nombre:p.nombre,forecast:null,days:observaciones.length};
+      if(observaciones.length<2)return {id:pid,nombre:p.nombre,forecast:null,days:observaciones.length};
 
       let sumaPonderada=0,sumaPesos=0;
       observaciones.forEach((obs,i)=>{
-        const peso=i+1; // Las fechas más recientes tienen mayor peso.
+        const peso=i+1;
         sumaPonderada+=obs[1]*peso;
         sumaPesos+=peso;
       });
@@ -150,29 +175,32 @@ async function cargarPrevision(){
       const valores=observaciones.map(o=>o[1]);
       const media=valores.reduce((a,b)=>a+b,0)/valores.length;
       const sd=Math.sqrt(valores.reduce((a,b)=>a+(b-media)**2,0)/valores.length);
-      const forecast=Math.round(estimacion);
+      const forecast=Math.max(0,Math.round(estimacion));
       const margen=Math.max(1,sd);
       const low=Math.max(0,Math.round(estimacion-margen));
       const high=Math.max(low,Math.round(estimacion+margen));
       let conf='🔴 Poco fiable';
       if(observaciones.length>=4&&sd<=Math.max(2,media*.35))conf='🟢 Fiable';
       else if(observaciones.length>=3)conf='🟡 Orientativa';
-      return {nombre:p.nombre,forecast,low,high,conf,days:observaciones.length};
-    }).filter(x=>x.forecast!==null).sort((a,b)=>b.forecast-a.forecast);
+      const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
+      const sobrante=registrado?sobrantesPorProducto[pid]:0;
+      const preparar=Math.max(0,forecast-sobrante);
+      return {id:pid,nombre:p.nombre,forecast,preparar,sobrante,sobranteRegistrado:registrado,low,high,conf,days:observaciones.length};
+    }).filter(x=>x.forecast!==null).sort((a,b)=>b.preparar-a.preparar);
 
     $('forecastRows').innerHTML=rows.length
-      ?rows.map(x=>`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${x.forecast}</td><td>${x.low}–${x.high}</td><td>${x.conf}</td><td>${x.days}</td></tr>`).join('')
-      :'<tr><td colspan="5" class="note">Todavía no hay al menos 2 registros del mismo día de la semana dentro de los últimos 120 días.</td></tr>';
+      ?rows.map(x=>`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${x.forecast}</td><td>${x.sobranteRegistrado?x.sobrante:'0*'}</td><td><strong>${x.preparar}</strong></td><td>${x.low}–${x.high}</td><td>${x.conf}</td><td>${x.days}</td></tr>`).join('')
+      :'<tr><td colspan="7" class="note">Todavía no hay al menos 2 registros del mismo día de la semana dentro de los últimos 120 días.</td></tr>';
     $('forecastTotal').textContent=rows.length
-      ?`Previsión para ${fmtDate(fechaObjetivo)}: aproximadamente ${rows.reduce((a,x)=>a+x.forecast,0)} unidades en total. Se usan hasta 4 registros del mismo día de la semana.`
+      ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${rows.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${rows.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. *Sin registro de sobrante se descuentan 0 unidades.`
       :'Sin previsión disponible todavía.';
   }catch(e){
     console.error(e);
-    $('forecastRows').innerHTML='<tr><td colspan="5" class="note">No se pudo calcular la previsión.</td></tr>';
+    $('leftoverRows').innerHTML='<tr><td colspan="2" class="note">No se pudieron cargar los sobrantes de hoy.</td></tr>';
+    $('forecastRows').innerHTML='<tr><td colspan="7" class="note">No se pudo calcular la previsión.</td></tr>';
     $('forecastTotal').textContent='';
   }
 }
-
 async function cargarDashboard(){const {desde,hasta}=rangoPeriodo();if(desde>hasta){$('rangoResumen').textContent='El rango de fechas no es válido.';return}try{const uid=$('dashboardUsuario').value;let path=`/registros?select=fecha,usuario_id,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${encodeURIComponent(desde)}&fecha=lte.${encodeURIComponent(hasta)}`;if(uid)path+=`&usuario_id=eq.${encodeURIComponent(uid)}`;const registros=await get(path);const users=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));const total={inicial:0,consumo:0,merma:0,base:0,reposicion:0,sobrante:0};const dias=new Set(),byProduct={},byWorker={};registros.forEach(r=>{const x=filaCalculo(r);Object.keys(total).forEach(k=>total[k]+=x[k]||0);dias.add(r.fecha);const p=prods[String(r.producto_id)]||{nombre:'Producto'};const pid=String(r.producto_id);if(!byProduct[pid])byProduct[pid]={p,reg:0,consumo:0,merma:0,base:0};const bp=byProduct[pid];bp.reg++;bp.consumo+=x.consumo;bp.merma+=x.merma;bp.base+=x.base;const wid=String(r.usuario_id);if(!byWorker[wid])byWorker[wid]={nombre:users[wid]||'Usuario',reg:0,consumo:0,merma:0,base:0};const bw=byWorker[wid];bw.reg++;bw.consumo+=x.consumo;bw.merma+=x.merma;bw.base+=x.base});const pct=total.base?total.merma/total.base*100:0;$('mConsumo').textContent=total.consumo;$('mMermaPct').textContent=pct.toFixed(2).replace('.',',')+'%';$('mMermaUnits').textContent=total.merma+' unidades';$('mRegistros').textContent=registros.length;$('mTrabajadores').textContent=new Set(registros.map(r=>String(r.usuario_id))).size;$('mDias').textContent=dias.size;$('mInicial').textContent=total.inicial;$('mReposicion').textContent=total.reposicion;$('mSobrante').textContent=total.sobrante;renderCharts(byProduct);renderWorkers(byWorker);renderProducts(byProduct);cargarPrevision();$('rangoResumen').textContent=`Periodo: ${fmtDate(desde)} → ${fmtDate(hasta)} · ${registros.length} registros`}catch(e){console.error(e);$('rangoResumen').textContent='No se pudo cargar el dashboard: '+e.message}}
 async function cargarHistorial(){try{const rows=await get('/registros?select=fecha,usuario_id&order=creado_en.desc&limit=150');const users=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const g={};rows.forEach(r=>{const k=`${r.fecha} · ${users[String(r.usuario_id)]||'Usuario'}`;g[k]=(g[k]||0)+1});const ks=Object.keys(g).slice(0,12);$('historial').innerHTML=ks.length?ks.map(k=>`<div class="history-row"><strong>${esc(k)}</strong><br><span class="note">${g[k]} productos registrados</span></div>`).join(''):'<div class="note">No hay registros.</div>'}catch(e){$('historial').innerHTML='<div class="note">No se pudo cargar el historial.</div>'}}
 async function exportarCSV(){try{const rows=await get('/registros?select=fecha,hora,usuario_id,producto_id,inicial,reposicion,sobrante,merma,observaciones&order=fecha.asc,hora.asc');if(!rows.length){alert('No hay registros para exportar.');return}const us=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));const ps=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));const cols=['fecha','hora','usuario','producto','inicial','reposicion','sobrante','merma','consumo','merma_porcentaje','observaciones'];const data=rows.map(r=>{const x=filaCalculo(r);return [r.fecha,r.hora||'',us[String(r.usuario_id)]||'',ps[String(r.producto_id)]?.nombre||'',r.inicial,r.reposicion,r.sobrante,r.merma,x.consumo,(x.pct/100).toFixed(4),r.observaciones||'']});const csv=[cols.join(';'),...data.map(row=>row.map(v=>String(v??'').replaceAll(';',',').replaceAll('\n',' ')).join(';'))].join('\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='control_diario.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){alert('No se ha podido exportar: '+e.message)}}
@@ -181,4 +209,3 @@ init();
 </script>
 </body>
 </html>
-
