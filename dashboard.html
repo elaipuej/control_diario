@@ -57,11 +57,7 @@ select,input{border:1px solid #ccd7e0;padding:11px;background:#fff} button{borde
   </div>
 </section>
 
-<section class="card">
-  <div class="section-title">🥡 Sobrantes de hoy (disponibles para mañana)</div>
-  <div class="note">Muestra el sobrante registrado al cierre de hoy para cada producto. Si no hay registro para un producto, se considera 0 sobrante para el cálculo; registra el cierre para que la preparación recomendada sea más precisa.</div>
-  <div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Sobrante registrado hoy</th></tr></thead><tbody id="leftoverRows"></tbody></table></div>
-</section>
+
 
 <section class="card">
   <div class="section-title">🔮 Previsión y preparación para mañana</div>
@@ -137,15 +133,6 @@ async function cargarPrevision(){
       if(!(pid in sobrantesPorProducto))sobrantesPorProducto[pid]=Math.max(0,Number(r.sobrante)||0);
     });
 
-    $('leftoverRows').innerHTML=PRODUCTOS.length
-      ?PRODUCTOS.map(p=>{
-        const pid=String(p.id);
-        const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
-        const cantidad=registrado?sobrantesPorProducto[pid]:0;
-        return `<tr><td class="name-cell"><strong>${esc(p.nombre)}</strong></td><td>${registrado?cantidad:'Sin registro (0 descontado)'}</td></tr>`;
-      }).join('')
-      :'<tr><td colspan="2" class="note">No hay productos activos.</td></tr>';
-
     registros.forEach(r=>{
       const pid=String(r.producto_id);
       if(!prods[pid]||!r.fecha)return;
@@ -196,7 +183,6 @@ async function cargarPrevision(){
       :'Sin previsión disponible todavía.';
   }catch(e){
     console.error(e);
-    $('leftoverRows').innerHTML='<tr><td colspan="2" class="note">No se pudieron cargar los sobrantes de hoy.</td></tr>';
     $('forecastRows').innerHTML='<tr><td colspan="7" class="note">No se pudo calcular la previsión.</td></tr>';
     $('forecastTotal').textContent='';
   }
