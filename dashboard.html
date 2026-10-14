@@ -61,7 +61,7 @@ select,input{border:1px solid #ccd7e0;padding:11px;background:#fff} button{borde
 
 <section class="card">
   <div class="section-title">🔮 Previsión y preparación para mañana</div>
-  <div class="note">La estimación predice el consumo de mañana usando hasta 4 registros de los últimos 120 días que coincidan con el mismo día de la semana. “Preparar aprox.” resta el sobrante aprovechable registrado hoy: máximo entre 0 y estimación menos sobrante de hoy.</div>
+  <div class="note">La estimación prioriza hasta 4 registros de los últimos 120 días del mismo día de la semana. Si no hay al menos 2, usa los registros recientes disponibles como alternativa y marca la fiabilidad como baja. “Preparar aprox.” resta el sobrante aprovechable registrado hoy: máximo entre 0 y estimación menos sobrante de hoy.</div>
   <div class="table-wrap"><table class="data-table"><thead><tr><th>Producto</th><th>Estimación</th><th>Sobrante hoy</th><th>Preparar aprox.</th><th>Habitual</th><th>Fiabilidad</th><th>Días</th></tr></thead><tbody id="forecastRows"></tbody></table></div>
   <div id="forecastTotal" class="range-summary" style="margin-top:12px"></div>
 </section>
@@ -123,6 +123,7 @@ async function cargarPrevision(){
     const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));
     const diaObjetivo=manana.getDay();
     const porProducto={};
+    const porProductoTodos={};
     const sobrantesPorProducto={};
 
     // Un sobrante por producto para la jornada de hoy. No se vuelve a sumar
@@ -137,19 +138,27 @@ async function cargarPrevision(){
       const pid=String(r.producto_id);
       if(!prods[pid]||!r.fecha)return;
       const fechaRegistro=parseISO(r.fecha);
-      if(fechaRegistro.getDay()!==diaObjetivo)return;
       const base=(Number(r.inicial)||0)+(Number(r.reposicion)||0);
       const consumo=base-(Number(r.sobrante)||0);
-      if(!porProducto[pid])porProducto[pid]=new Map();
-      if(!porProducto[pid].has(r.fecha))porProducto[pid].set(r.fecha,consumo);
+      if(!porProductoTodos[pid])porProductoTodos[pid]=new Map();
+      if(!porProductoTodos[pid].has(r.fecha))porProductoTodos[pid].set(r.fecha,consumo);
+      if(fechaRegistro.getDay()===diaObjetivo){
+        if(!porProducto[pid])porProducto[pid]=new Map();
+        if(!porProducto[pid].has(r.fecha))porProducto[pid].set(r.fecha,consumo);
+      }
     });
 
     const rows=PRODUCTOS.map(p=>{
       const pid=String(p.id);
-      const mapa=porProducto[pid]||new Map();
-      const observaciones=[...mapa.entries()]
+      let observaciones=[...(porProducto[pid]||new Map()).entries()]
         .sort((a,b)=>a[0].localeCompare(b[0]))
         .slice(-4);
+      const usaHistorialGeneral=observaciones.length<2;
+      if(usaHistorialGeneral){
+        observaciones=[...(porProductoTodos[pid]||new Map()).entries()]
+          .sort((a,b)=>a[0].localeCompare(b[0]))
+          .slice(-4);
+      }
       if(observaciones.length<2)return {id:pid,nombre:p.nombre,forecast:null,days:observaciones.length};
 
       let sumaPonderada=0,sumaPesos=0;
@@ -166,9 +175,9 @@ async function cargarPrevision(){
       const margen=Math.max(1,sd);
       const low=Math.max(0,Math.round(estimacion-margen));
       const high=Math.max(low,Math.round(estimacion+margen));
-      let conf='🔴 Poco fiable';
-      if(observaciones.length>=4&&sd<=Math.max(2,media*.35))conf='🟢 Fiable';
-      else if(observaciones.length>=3)conf='🟡 Orientativa';
+      let conf=usaHistorialGeneral?'🔴 Poco fiable*':'🔴 Poco fiable';
+      if(!usaHistorialGeneral&&observaciones.length>=4&&sd<=Math.max(2,media*.35))conf='🟢 Fiable';
+      else if(!usaHistorialGeneral&&observaciones.length>=3)conf='🟡 Orientativa';
       const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
       const sobrante=registrado?sobrantesPorProducto[pid]:0;
       const preparar=Math.max(0,forecast-sobrante);
@@ -179,8 +188,8 @@ async function cargarPrevision(){
       ?rows.map(x=>`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${x.forecast}</td><td>${x.sobranteRegistrado?x.sobrante:'0*'}</td><td><strong>${x.preparar}</strong></td><td>${x.low}–${x.high}</td><td>${x.conf}</td><td>${x.days}</td></tr>`).join('')
       :'<tr><td colspan="7" class="note">Todavía no hay al menos 2 registros del mismo día de la semana dentro de los últimos 120 días.</td></tr>';
     $('forecastTotal').textContent=rows.length
-      ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${rows.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${rows.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. *Sin registro de sobrante se descuentan 0 unidades.`
-      :'Sin previsión disponible todavía.';
+      ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${rows.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${rows.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. *Fiabilidad baja: se usó historial de otros días de la semana. Si no hay registro de sobrante, se descuentan 0 unidades.`
+      :'Sin previsión disponible todavía. Se necesitan al menos 2 registros históricos del producto dentro de los últimos 120 días.';
   }catch(e){
     console.error(e);
     $('forecastRows').innerHTML='<tr><td colspan="7" class="note">No se pudo calcular la previsión.</td></tr>';
