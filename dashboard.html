@@ -120,6 +120,24 @@ async function cargarPrevision(){
     if(uid)sobrantesPath+=`&usuario_id=eq.${encodeURIComponent(uid)}`;
 
     const [registros,registrosHoy]=await Promise.all([get(path),get(sobrantesPath)]);
+
+    // La previsión de mañana solo incluye los productos seleccionados para hoy.
+    // Se aplica el mismo criterio que en Control Diario: selección de hoy,
+    // última selección anterior si hoy aún no hay una guardada, o todo el catálogo
+    // si todavía no existe ninguna selección guardada.
+    let idsSeleccionados=null;
+    try{
+      const seleccionHoy=await get(`/selecciones_productos?select=fecha,productos_ids&fecha=eq.${encodeURIComponent(hoy)}&limit=1`);
+      if(seleccionHoy.length){
+        idsSeleccionados=new Set((Array.isArray(seleccionHoy[0].productos_ids)?seleccionHoy[0].productos_ids:[]).map(String));
+      }else{
+        const anteriores=await get(`/selecciones_productos?select=fecha,productos_ids&fecha=lt.${encodeURIComponent(hoy)}&order=fecha.desc&limit=1`);
+        if(anteriores.length)idsSeleccionados=new Set((Array.isArray(anteriores[0].productos_ids)?anteriores[0].productos_ids:[]).map(String));
+      }
+    }catch(e){
+      console.warn('No se pudo consultar la selección de productos; se usará el catálogo completo.',e);
+    }
+    const productosPrevision=PRODUCTOS.filter(p=>idsSeleccionados===null||idsSeleccionados.has(String(p.id)));
     const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));
     const diaObjetivo=manana.getDay();
     const porProducto={};
@@ -148,7 +166,7 @@ async function cargarPrevision(){
       }
     });
 
-    const rows=PRODUCTOS.map(p=>{
+    const rows=productosPrevision.map(p=>{
       const pid=String(p.id);
       let observaciones=[...(porProducto[pid]||new Map()).entries()]
         .sort((a,b)=>a[0].localeCompare(b[0]))
@@ -189,7 +207,7 @@ async function cargarPrevision(){
       :'<tr><td colspan="7" class="note">Todavía no hay al menos 2 registros del mismo día de la semana dentro de los últimos 120 días.</td></tr>';
     $('forecastTotal').textContent=rows.length
       ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${rows.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${rows.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. *Fiabilidad baja: se usó historial de otros días de la semana. Si no hay registro de sobrante, se descuentan 0 unidades.`
-      :'Sin previsión disponible todavía. Se necesitan al menos 2 registros históricos del producto dentro de los últimos 120 días.';
+      :(productosPrevision.length===0?'No hay productos seleccionados para hoy. Abre Control Diario y guarda la selección de productos del día.':'Sin previsión disponible todavía. Se necesitan al menos 2 registros históricos del producto dentro de los últimos 120 días.');
   }catch(e){
     console.error(e);
     $('forecastRows').innerHTML='<tr><td colspan="7" class="note">No se pudo calcular la previsión.</td></tr>';
