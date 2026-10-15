@@ -6,78 +6,76 @@
 <meta name="theme-color" content="#173F5F">
 <title>Control Diario</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f6f9;color:#173F5F}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f3f6f9;color:#173F5F}
 header{background:#173F5F;color:#fff;padding:18px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-.header-inner{max-width:760px;margin:auto}h1{margin:0;font-size:23px}.subtitle{margin-top:4px;opacity:.8;font-size:13px}
-main{max-width:760px;margin:auto;padding:14px}.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.header-inner{max-width:760px;margin:auto}
+h1{margin:0;font-size:23px}.subtitle{margin-top:4px;opacity:.8;font-size:13px}
+main{max-width:760px;margin:auto;padding:14px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.07)}
 label{display:block;font-size:12px;font-weight:bold;margin:10px 0 5px}
 select,input,button{width:100%;font:inherit;border-radius:10px}
-select,input{border:1px solid #ccd7e0;padding:11px;background:#fff}input[type=number]{text-align:center}
-button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{background:#1976D2;color:#fff}.btn-secondary{background:#e9eef3;color:#173F5F;margin-top:8px}
-.progress-wrap{height:9px;background:#e5edf3;border-radius:20px;overflow:hidden;margin-top:10px}.progress{height:100%;width:0;background:#2EAD68;transition:width .2s}
+select,input{border:1px solid #ccd7e0;padding:11px;background:#fff}
+input[type=number]{text-align:center}
+button{border:0;padding:13px;cursor:pointer;font-weight:bold}
+button:disabled{opacity:.6;cursor:default}
+.btn-primary{background:#1976D2;color:#fff}
+.btn-save{font-size:16px;padding:17px;margin-top:4px}
+.btn-secondary{background:#e9eef3;color:#173F5F;margin-top:8px}
+.estado{font-size:12px;color:#657786;text-align:center;margin-top:8px;min-height:16px}
+.progress-wrap{height:9px;background:#e5edf3;border-radius:20px;overflow:hidden;margin-top:10px}
+.progress{height:100%;width:0;background:#2EAD68;transition:width .2s}
 .progress-info{display:flex;justify-content:space-between;font-size:12px;margin-top:7px;color:#657786}
-.section-title{font-size:15px;font-weight:bold;margin-bottom:8px}.product{border:1px solid #e2e9ee;border-radius:12px;padding:13px;margin-bottom:10px}
-.product-name{font-weight:bold;font-size:14px;margin-bottom:10px}.fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-.field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}.fields input{padding:9px 5px}
-.message{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}.success{background:#e8f7ef;color:#19724a}.warning{background:#fff4df;color:#8a5a00}
-.history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:13px}.muted{color:#657786;font-size:12px}
-.selector-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;background:#fff;color:#173F5F;text-align:left;padding:0;border:0;font-weight:bold;font-size:15px}
-.selector-toggle .chevron{transition:transform .2s;font-size:18px}.selector-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg)}
-.selector-panel{margin-top:14px}.selector-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.selector-toolbar button,.selector-apply{padding:10px;font-size:13px}.selector-search{margin-top:10px}.selector-list{max-height:330px;overflow:auto;border:1px solid #e2e9ee;border-radius:10px;margin-top:10px;padding:6px}
-.selector-item{display:flex;align-items:center;gap:10px;padding:9px 7px;border-bottom:1px solid #edf1f4;font-size:13px}.selector-item:last-child{border-bottom:0}.selector-item input{width:18px;height:18px;flex:0 0 auto;margin:0}.selector-item span{flex:1}.selector-count{font-size:12px;color:#657786;margin-top:8px}.selector-panel[hidden]{display:none!important}
-@media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
-
-.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:10px}
-.metric{background:#f7fafc;border:1px solid #e5edf3;border-radius:12px;padding:11px}
-.metric-label{font-size:10px;font-weight:bold;color:#657786;text-transform:uppercase}
-.metric-value{font-size:22px;font-weight:bold;margin-top:4px;color:#173F5F}
-.metric-sub{font-size:11px;color:#657786;margin-top:2px}
-.dashboard-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px}
-.dashboard-table th,.dashboard-table td{padding:8px 6px;border-bottom:1px solid #edf1f4;text-align:right}
-.dashboard-table th:first-child,.dashboard-table td:first-child{text-align:left}
-.dashboard-table th{font-size:10px;text-transform:uppercase;color:#657786}
-.small-btn{width:auto;padding:9px 12px;font-size:12px;margin-top:8px}
+.section-title{font-size:15px;font-weight:bold;margin-bottom:8px}
+.product{border:1px solid #e2e9ee;border-radius:12px;padding:13px;margin-bottom:10px}
+.product-name{font-weight:bold;font-size:14px;margin-bottom:10px}
+.fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}
+.fields input{padding:9px 5px}
 .calc-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
 .calc-box{background:#f7fafc;border:1px solid #e5edf3;border-radius:9px;padding:8px;text-align:center}
 .calc-title{font-size:9px;color:#657786;font-weight:bold;text-transform:uppercase}
 .calc-value{font-weight:bold;font-size:13px;margin-top:3px}
-.estimate-box{margin-top:8px;padding:10px;border-radius:9px;background:#eef6ff;border:1px solid #d7e8fa}.estimate-heading{font-size:10px;font-weight:bold;color:#355f88;text-transform:uppercase}.estimate-value{font-size:17px;font-weight:bold;color:#173F5F;margin-top:4px}.estimate-note{font-size:11px;color:#657786;margin-top:3px;line-height:1.4}
-@media(max-width:480px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}.dashboard-table{font-size:11px}.dashboard-table th,.dashboard-table td{padding:7px 4px}}
-
-.comparison-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
-.comparison-card{border:1px solid #e2e9ee;border-radius:12px;padding:12px;background:#fff}
-.comparison-title{font-size:14px;font-weight:bold;margin-bottom:4px}
-.comparison-note{font-size:11px;color:#657786;margin-bottom:8px}
-.comparison-table{width:100%;border-collapse:collapse;font-size:12px}
-.comparison-table th,.comparison-table td{padding:8px 6px;border-bottom:1px solid #edf1f4;text-align:right;vertical-align:middle}
-.comparison-table th:first-child,.comparison-table td:first-child{text-align:left}
-.comparison-table th{font-size:10px;text-transform:uppercase;color:#657786}
-.bar-wrap{height:7px;background:#e8eef3;border-radius:10px;overflow:hidden;min-width:70px}
-.bar{height:100%;background:#1976D2;border-radius:10px}
-@media(max-width:480px){.comparison-table{font-size:11px}.comparison-table th,.comparison-table td{padding:7px 4px}.bar-wrap{min-width:45px}}
-
-.date-range-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.range-summary{margin-top:8px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px}
-.range-select{margin-top:2px}
-@media(max-width:480px){.date-range-row{grid-template-columns:1fr 1fr}}
-
-.top10-chart{margin-top:14px}.chart-wrap{display:flex;flex-direction:column;gap:9px;margin-top:10px}.chart-row{display:grid;grid-template-columns:minmax(150px,1.7fr) minmax(90px,3fr) 52px;gap:8px;align-items:center}.chart-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chart-track{height:20px;background:#edf2f6;border-radius:7px;overflow:hidden}.chart-fill{height:100%;background:#1976D2;border-radius:7px;min-width:2px}.chart-value{text-align:right;font-size:12px;font-weight:bold}.chart-empty{padding:14px;border:1px dashed #d7e1e8;border-radius:10px;color:#657786;font-size:12px}
-@media(max-width:480px){.chart-row{grid-template-columns:minmax(120px,1.5fr) minmax(70px,2fr) 45px;gap:6px}.chart-label{font-size:10px}.chart-value{font-size:11px}}
-.tools-card .tool-link{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:13px;margin-top:10px;font-weight:bold}.primary-link{background:#1976D2;color:#fff}.tools-card .tool-link:hover{filter:brightness(.97)}
+.message{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}
+.success{background:#e8f7ef;color:#19724a}
+.warning{background:#fff4df;color:#8a5a00}
+.aviso{margin-top:10px;padding:10px;border-radius:10px;background:#fff4df;color:#8a5a00;font-size:13px}
+.aviso[hidden]{display:none}
+.muted{color:#657786;font-size:12px}
+.selector-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;background:#fff;color:#173F5F;text-align:left;padding:0;border:0;font-weight:bold;font-size:15px}
+.selector-toggle .chevron{transition:transform .2s;font-size:18px}
+.selector-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg)}
+.selector-panel{margin-top:14px}
+.selector-panel[hidden]{display:none!important}
+.selector-toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.selector-toolbar button,.selector-apply{padding:10px;font-size:13px}
+.selector-search{margin-top:10px}
+.selector-list{max-height:330px;overflow:auto;border:1px solid #e2e9ee;border-radius:10px;margin-top:10px;padding:6px}
+.selector-item{display:flex;align-items:center;gap:10px;padding:9px 7px;border-bottom:1px solid #edf1f4;font-size:13px}
+.selector-item:last-child{border-bottom:0}
+.selector-item input{width:18px;height:18px;flex:0 0 auto;margin:0}
+.selector-item span{flex:1}
+.selector-count{font-size:12px;color:#657786;margin-top:8px}
+.tools-card .tool-link{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:13px;margin-top:10px;font-weight:bold;background:#1976D2;color:#fff}
+@media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
 </style>
 </head>
 <body>
 <header><div class="header-inner"><h1>Control Diario</h1><div class="subtitle">Registro diario de productos · Datos compartidos</div></div></header>
 <main>
 <section class="card">
-<label for="fecha">Fecha</label><input id="fecha" type="date">
-<label for="usuario">Usuario</label>
-<select id="usuario"><option value="">Seleccionar usuario...</option><option>Ana</option><option>Luis</option><option>María</option><option>Juan</option><option>Pedro</option></select>
+  <label for="fecha">Fecha</label><input id="fecha" type="date">
+  <label for="tipoDia">Tipo de día</label>
+  <select id="tipoDia"></select>
+  <label for="usuario">Usuario</label>
+  <select id="usuario"><option value="">Seleccionar usuario...</option></select>
 </section>
+
 <section class="card">
-<div class="section-title">Progreso del control</div>
-<div class="progress-wrap"><div id="progress" class="progress"></div></div>
-<div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
+  <div class="section-title">Progreso del control</div>
+  <div class="progress-wrap"><div id="progress" class="progress"></div></div>
+  <div class="progress-info"><span id="progressText">0 productos</span><span id="progressPercent">0%</span></div>
+  <div id="avisoPendientes" class="aviso" hidden></div>
 </section>
 
 <section class="card" id="selectorCard">
@@ -96,22 +94,26 @@ button{border:0;padding:13px;cursor:pointer;font-weight:bold}.btn-primary{backgr
     <button type="button" class="btn-primary selector-apply" id="aplicarSeleccion" style="margin-top:10px">APLICAR SELECCIÓN</button>
   </div>
 </section>
+
 <section class="card" id="productosControlCard">
   <button type="button" class="selector-toggle" id="productosControlToggle" aria-expanded="false" aria-controls="productosControlPanel">
     <span id="productosControlTitulo">Productos del control</span><span class="chevron" aria-hidden="true">⌄</span>
   </button>
   <div id="productosControlPanel" class="selector-panel" hidden><div id="productos"></div></div>
 </section>
+
 <section class="card">
-<button class="btn-primary" onclick="guardarControl()">GUARDAR CONTROL</button>
-<button class="btn-secondary" onclick="limpiarFormulario()">Limpiar formulario</button>
-<div id="mensaje" class="message"></div>
+  <button type="button" class="btn-primary btn-save" id="guardarBtn" onclick="guardarControl(true)">GUARDAR CONTROL</button>
+  <div id="estadoGuardado" class="estado">Sin cambios</div>
+  <div id="estadoCola" class="aviso" hidden></div>
+  <button type="button" class="btn-secondary" onclick="limpiarFormulario()">Limpiar formulario</button>
+  <div id="mensaje" class="message"></div>
 </section>
 
 <section class="card tools-card">
   <div class="section-title">Herramientas</div>
-  <div class="muted">El análisis, historial y exportación están en una página separada para mantener este formulario rápido y limpio.</div>
-  <a class="tool-link primary-link" href="dashboard.html">📊 Abrir Dashboard</a>
+  <div class="muted">El análisis, la previsión y el historial están en una página separada.</div>
+  <a class="tool-link" href="dashboard.html">Abrir Dashboard</a>
 </section>
 </main>
 <script>
@@ -120,6 +122,10 @@ const SUPABASE_KEY = "sb_publishable_6hvO0W5rYKVpSgGuWBXnTA_J8CtzfqS";
 const API = SUPABASE_URL + "/rest/v1";
 const headers = { "apikey": SUPABASE_KEY, "Content-Type": "application/json" };
 
+const HORA_AVISO = 20;              // a partir de esta hora se avisa de productos sin registrar hoy
+const COLA_KEY = "control_diario_pendientes";
+const TIPOS_DIA = ["Normal", "Festivo", "Evento", "Cierre parcial"];
+
 let PRODUCTOS = [];
 let USUARIOS = [];
 let productosSeleccionados = new Set();
@@ -127,9 +133,9 @@ let seleccionPendiente = new Set();
 let fechaSeleccionCargada = null;
 let autoSaveTimer = null;
 let aplicandoCambios = false;
-let historicoEstimacion = [];
-let estimacionRequestId = 0;
+let registrosExistentes = 0;
 const fechaInput = document.getElementById("fecha");
+const tipoDiaInput = document.getElementById("tipoDia");
 const usuarioInput = document.getElementById("usuario");
 const productosContainer = document.getElementById("productos");
 const selectorToggle = document.getElementById("selectorToggle");
@@ -144,8 +150,67 @@ function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(
 function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 async function supabaseGet(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||(`HTTP ${r.status}`));return r.json();}
 async function supabasePost(path, body){const r=await fetch(API+path,{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(body)});const txt=await r.text();if(!r.ok)throw new Error(txt||(`HTTP ${r.status}`));try{return txt?JSON.parse(txt):[];}catch{return [];}}
+function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
 
-fechaInput.value=fechaLocalISO();
+/* ---------- Estado de guardado ---------- */
+function estado(tipo){
+  const el=document.getElementById("estadoGuardado");
+  const hora=new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
+  const texto={sin:"Sin cambios",dirty:"Cambios sin guardar",guardando:"Guardando…",guardado:`Guardado a las ${hora}`,pendiente:"Guardado en este dispositivo · pendiente de enviar"};
+  el.textContent=texto[tipo]||"";
+}
+
+/* ---------- Envío sin conexión: cola local ---------- */
+function leerCola(){try{return JSON.parse(localStorage.getItem(COLA_KEY)||"[]");}catch{return [];}}
+function escribirCola(c){try{localStorage.setItem(COLA_KEY,JSON.stringify(c));}catch(e){console.error(e);}actualizarIndicadorCola();}
+function claveRegistro(r){return `${r.fecha}|${r.usuario_id}|${r.producto_id}`;}
+function encolar(registros){
+  // Un mismo producto/día/usuario solo ocupa una entrada: la última versión sustituye a la anterior.
+  const mapa=new Map(leerCola().map(r=>[claveRegistro(r),r]));
+  registros.forEach(r=>mapa.set(claveRegistro(r),r));
+  escribirCola([...mapa.values()]);
+}
+function actualizarIndicadorCola(){
+  const n=leerCola().length;
+  const el=document.getElementById("estadoCola");
+  el.hidden=!n;
+  el.textContent=n?`Hay ${n} registro(s) pendientes de enviar. Se enviarán automáticamente cuando haya conexión.`:"";
+}
+async function vaciarCola(){
+  if(!navigator.onLine)return;
+  let cola=leerCola();
+  if(!cola.length){actualizarIndicadorCola();return;}
+  const grupos=new Map();
+  cola.forEach(r=>{const k=`${r.fecha}|${r.usuario_id}`;if(!grupos.has(k))grupos.set(k,[]);grupos.get(k).push(r);});
+  let enviados=0;
+  for(const [k,filas] of grupos){
+    try{await enviarRegistros(filas);cola=cola.filter(r=>`${r.fecha}|${r.usuario_id}`!==k);enviados+=filas.length;}
+    catch(e){console.error("Error al enviar pendientes:",e);break;}
+  }
+  escribirCola(cola);
+  if(enviados)mostrarMensaje(`Datos pendientes enviados correctamente (${enviados}).`,"success");
+}
+window.addEventListener("online",()=>vaciarCola());
+window.addEventListener("offline",()=>mostrarMensaje("Sin conexión. Los cambios se guardarán en este dispositivo.","warning"));
+
+/* ---------- Tipo de día ---------- */
+function renderizarTipos(){tipoDiaInput.innerHTML=TIPOS_DIA.map(t=>`<option>${t}</option>`).join("");}
+async function cargarTipoDia(){
+  if(!fechaInput.value)return;
+  try{
+    const rows=await supabaseGet(`/dias_especiales?select=tipo&fecha=eq.${encodeURIComponent(fechaInput.value)}&limit=1`);
+    tipoDiaInput.value=rows.length?rows[0].tipo:"Normal";
+  }catch(e){console.warn("No se pudo leer el tipo de día:",e);tipoDiaInput.value="Normal";}
+}
+async function guardarTipoDia(){
+  try{
+    const r=await fetch(API+"/dias_especiales?on_conflict=fecha",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=minimal"},body:JSON.stringify([{fecha:fechaInput.value,tipo:tipoDiaInput.value,actualizado_en:new Date().toISOString()}])});
+    if(!r.ok)throw new Error(await r.text()||`HTTP ${r.status}`);
+    mostrarMensaje(`Tipo de día guardado: ${tipoDiaInput.value}.`,"success");
+  }catch(e){mostrarMensaje("No se pudo guardar el tipo de día: "+e.message,"warning");}
+}
+
+/* ---------- Pestañas ---------- */
 selectorToggle.addEventListener("click",()=>{
   const abrir=selectorToggle.getAttribute("aria-expanded")!=="true";
   selectorToggle.setAttribute("aria-expanded",String(abrir));
@@ -159,17 +224,26 @@ productosControlToggle.addEventListener("click",()=>{
 
 async function cargarDatosIniciales(){
   try{
+    fechaInput.value=fechaLocalISO();
+    renderizarTipos();
     PRODUCTOS=await supabaseGet("/productos?activo=eq.true&order=orden.asc");
     USUARIOS=await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
     usuarioInput.innerHTML='<option value="">Seleccionar usuario...</option>'+USUARIOS.map(u=>`<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
-    const porDefecto=USUARIOS.find(u=>String(u.nombre||'').toLowerCase().includes('jhasmin'))||(USUARIOS.length===1?USUARIOS[0]:null);
-    if(porDefecto&&!usuarioInput.value)usuarioInput.value=String(porDefecto.id);
+    const porDefecto=USUARIOS.find(u=>String(u.nombre||"").toLowerCase().includes("jhasmin"))||(USUARIOS.length===1?USUARIOS[0]:null);
+    if(porDefecto)usuarioInput.value=String(porDefecto.id);
     await cargarSeleccionParaFecha(fechaInput.value);
     renderizarSelector();
-    crearProductos(); actualizarProgreso(); actualizarCalculos();
+    crearProductos();
+    actualizarProgreso();
+    actualizarCalculos();
     if(usuarioInput.value)await cargarControlExistente();
-    await cargarHistoricoEstimacion();
-  }catch(error){console.error(error);mostrarMensaje("No se ha podido conectar con la base de datos: "+error.message,"warning");}
+    await cargarTipoDia();
+    actualizarIndicadorCola();
+    vaciarCola();
+  }catch(error){
+    console.error(error);
+    mostrarMensaje("No se ha podido conectar con la base de datos: "+error.message,"warning");
+  }
 }
 
 function renderizarSelector(){
@@ -219,7 +293,7 @@ function crearProductos(){
   if(!lista.length){productosContainer.innerHTML='<div class="muted">No hay productos seleccionados para esta fecha. Abre “Seleccionar productos del día” para elegirlos.</div>';return;}
   lista.forEach((p)=>{
     const numero=PRODUCTOS.findIndex(x=>String(x.id)===String(p.id))+1;
-    const b=document.createElement("div"); b.className="product";b.dataset.productCard=String(p.id);
+    const b=document.createElement("div");b.className="product";b.dataset.productCard=String(p.id);
     b.innerHTML=`<div class="product-name">${numero}. ${escapeHtml(p.nombre)}</div>
       <div class="fields">
         <div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="inicial" inputmode="numeric"></div>
@@ -230,66 +304,9 @@ function crearProductos(){
       <div class="calc-row">
         <div class="calc-box"><div class="calc-title">Consumo</div><div class="calc-value" data-calculo="consumo" data-producto="${p.id}">0</div></div>
         <div class="calc-box"><div class="calc-title">% Merma</div><div class="calc-value" data-calculo="mermaPct" data-producto="${p.id}">0,00%</div></div>
-      </div>
       </div>`;
     productosContainer.appendChild(b);
   });
-}
-
-function restarDiasISO(fechaISO, dias){
-  const d = new Date(`${fechaISO}T12:00:00`);
-  d.setDate(d.getDate()-dias);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-function formatearNumero(n){
-  return Number(n).toLocaleString("es-ES",{maximumFractionDigits:1,minimumFractionDigits:0});
-}
-function calcularEstimacionProducto(productoId){
-  const valor=document.querySelector(`[data-estimacion="${productoId}"]`);
-  const nota=document.querySelector(`[data-estimacion-nota="${productoId}"]`);
-  if(!valor||!nota)return;
-  if(!fechaInput.value){valor.textContent="Sin fecha";nota.textContent="Selecciona una fecha para calcular la estimación.";return;}
-  const diaObjetivo=new Date(`${fechaInput.value}T12:00:00`).getDay();
-  const porFecha=new Map();
-  historicoEstimacion.forEach(r=>{
-    if(String(r.producto_id)!==String(productoId)||!r.fecha||r.fecha>=fechaInput.value)return;
-    const d=new Date(`${r.fecha}T12:00:00`);
-    if(d.getDay()!==diaObjetivo)return;
-    const base=(Number(r.inicial)||0)+(Number(r.reposicion)||0);
-    const consumo=base-(Number(r.sobrante)||0);
-    if(!porFecha.has(r.fecha))porFecha.set(r.fecha,consumo);
-  });
-  const observaciones=[...porFecha.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-4);
-  if(observaciones.length<2){
-    valor.textContent="Aún sin estimación";
-    nota.textContent=observaciones.length===1?"Solo hay 1 registro anterior de este mismo día. Se necesitan al menos 2 para estimar.":"Todavía no hay suficientes registros anteriores de este mismo día.";
-    return;
-  }
-  let sumaPonderada=0,sumaPesos=0;
-  observaciones.forEach((obs,i)=>{const peso=i+1;sumaPonderada+=obs[1]*peso;sumaPesos+=peso;});
-  const estimacion=sumaPonderada/sumaPesos;
-  valor.textContent=`${formatearNumero(Math.round(estimacion))} unidades`;
-  const detalle=observaciones.map(o=>`${o[0]}: ${formatearNumero(o[1])}`).join(" · ");
-  nota.textContent=`Estimación ponderada de ${observaciones.length} registros del mismo día; los recientes pesan más. Histórico: ${detalle}.${observaciones.length<4?" Estimación provisional: aún hay menos de 4 observaciones.":""}`;
-}
-function actualizarEstimaciones(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularEstimacionProducto(p.id));}
-async function cargarHistoricoEstimacion(){
-  const requestId=++estimacionRequestId;historicoEstimacion=[];actualizarEstimaciones();
-  if(!fechaInput.value)return;
-  try{
-    const desde=restarDiasISO(fechaInput.value,120);
-    let path=`/registros?select=fecha,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${encodeURIComponent(desde)}&fecha=lt.${encodeURIComponent(fechaInput.value)}&order=fecha.desc&limit=5000`;
-    if(usuarioInput.value)path+=`&usuario_id=eq.${encodeURIComponent(usuarioInput.value)}`;
-    const rows=await supabaseGet(path);if(requestId!==estimacionRequestId)return;
-    historicoEstimacion=Array.isArray(rows)?rows:[];actualizarEstimaciones();
-  }catch(error){
-    console.error("No se pudo cargar el histórico para estimaciones:",error);
-    if(requestId===estimacionRequestId)PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{
-      const valor=document.querySelector(`[data-estimacion="${p.id}"]`),nota=document.querySelector(`[data-estimacion-nota="${p.id}"]`);
-      if(valor)valor.textContent="No disponible";
-      if(nota)nota.textContent="No se pudo consultar el histórico. Los registros guardados no se han modificado.";
-    });
-  }
 }
 
 function calcularProducto(id){
@@ -298,21 +315,38 @@ function calcularProducto(id){
   const base=inicial+reposicion, consumo=base-sobrante, pct=base>0?(merma/base)*100:0;
   const ce=document.querySelector(`[data-calculo="consumo"][data-producto="${id}"]`);
   const me=document.querySelector(`[data-calculo="mermaPct"][data-producto="${id}"]`);
-  if(ce)ce.textContent=String(consumo); if(me)me.textContent=pct.toFixed(2).replace('.',',')+'%';
+  if(ce)ce.textContent=String(consumo);
+  if(me)me.textContent=pct.toFixed(2).replace('.',',')+'%';
 }
-function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));actualizarEstimaciones();}
+function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));}
+
 function actualizarProgreso(){
-  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));let n=0;
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+  let n=0;
   lista.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
-  const pct=Math.round((n/(lista.length||1))*100);document.getElementById("progress").style.width=(lista.length?pct:0)+"%";document.getElementById("progressText").textContent=`${n} / ${lista.length} productos`;document.getElementById("progressPercent").textContent=(lista.length?pct:0)+"%";
+  const pct=Math.round((n/(lista.length||1))*100);
+  document.getElementById("progress").style.width=(lista.length?pct:0)+"%";
+  document.getElementById("progressText").textContent=`${n} / ${lista.length} productos`;
+  document.getElementById("progressPercent").textContent=(lista.length?pct:0)+"%";
+  // Aviso de productos sin registrar: en días pasados siempre; hoy, a partir de HORA_AVISO.
+  const pendientes=lista.length-n;
+  const hoy=fechaLocalISO();
+  const aviso=document.getElementById("avisoPendientes");
+  const esPasado=fechaInput.value<hoy;
+  const esHoyTarde=fechaInput.value===hoy&&new Date().getHours()>=HORA_AVISO;
+  const mostrar=pendientes>0&&!!usuarioInput.value&&(esPasado||esHoyTarde);
+  aviso.hidden=!mostrar;
+  if(mostrar)aviso.textContent=esPasado?`Este día tiene ${pendientes} producto(s) sin registrar.`:`Quedan ${pendientes} producto(s) sin registrar para hoy.`;
 }
 
 document.addEventListener("input",(e)=>{
   if(e.target.matches('input[type="number"][data-producto]')){
-    actualizarProgreso();actualizarCalculos();clearTimeout(autoSaveTimer);
-    autoSaveTimer=setTimeout(()=>{if(fechaInput.value&&usuarioInput.value)guardarControl();},700);
+    actualizarProgreso();actualizarCalculos();estado("dirty");
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer=setTimeout(()=>{if(fechaInput.value&&usuarioInput.value)guardarControl(false);},700);
   }
 });
+tipoDiaInput.addEventListener("change",guardarTipoDia);
 
 function obtenerRegistros(){
   const fecha=fechaInput.value,usuarioId=Number(usuarioInput.value),out=[];
@@ -320,19 +354,34 @@ function obtenerRegistros(){
     const get=c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el?el.value:"";};
     const inicial=get("inicial"),reposicion=get("reposicion"),sobrante=get("sobrante"),merma=get("merma");
     if([inicial,reposicion,sobrante,merma].some(v=>v!==""))out.push({fecha,usuario_id:usuarioId,producto_id:p.id,inicial:Number(inicial)||0,reposicion:Number(reposicion)||0,sobrante:Number(sobrante)||0,merma:Number(merma)||0});
-  });return out;
+  });
+  return out;
+}
+
+/* ---------- Validación antes de guardar ---------- */
+function validarRegistros(registros){
+  const errores=[];
+  registros.forEach(r=>{
+    const nombre=(PRODUCTOS.find(p=>String(p.id)===String(r.producto_id))||{}).nombre||`Producto ${r.producto_id}`;
+    const base=r.inicial+r.reposicion;
+    if([r.inicial,r.reposicion,r.sobrante,r.merma].some(v=>v<0))errores.push(`${nombre}: no se admiten valores negativos.`);
+    if(r.sobrante>base)errores.push(`${nombre}: el sobrante (${r.sobrante}) supera lo disponible (${base}).`);
+    if(r.merma>base)errores.push(`${nombre}: la merma (${r.merma}) supera la base (${base}).`);
+  });
+  return errores;
 }
 
 async function cargarControlExistente(){
   if(!fechaInput.value||!usuarioInput.value||!PRODUCTOS.length)return;
   try{
     const rows=await supabaseGet(`/registros?select=producto_id,inicial,reposicion,sobrante,merma&fecha=eq.${encodeURIComponent(fechaInput.value)}&usuario_id=eq.${encodeURIComponent(usuarioInput.value)}`);
+    registrosExistentes=rows.length;
     // Limpiar únicamente los campos visibles. No se elimina ni modifica ningún dato en la BD.
     productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
     const map=Object.fromEntries(rows.map(r=>[String(r.producto_id),r]));
     PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{const r=map[String(p.id)];if(!r)return;["inicial","reposicion","sobrante","merma"].forEach(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);if(el)el.value=r[c]??0;});});
     actualizarProgreso();actualizarCalculos();
-    if(rows.length)mostrarMensaje(`Se han cargado ${rows.length} productos registrados para esta fecha y usuario. Los registros de productos no seleccionados se conservan.`,"success");
+    if(rows.length)mostrarMensaje(`Se han cargado ${rows.length} productos registrados para esta fecha y usuario. Al guardar, se actualizarán esos valores.`,"success");
     else document.getElementById("mensaje").style.display="none";
   }catch(e){console.error(e);mostrarMensaje("No se pudo cargar el control existente: "+e.message,"warning");}
 }
@@ -342,10 +391,10 @@ async function aplicarSeleccion(){
   const boton=document.getElementById("aplicarSeleccion");boton.disabled=true;boton.textContent="APLICANDO...";
   try{
     // Guardar los valores visibles actuales antes de cambiar la lista, sin borrar nada.
-    if(fechaInput.value&&usuarioInput.value){const actuales=obtenerRegistros();if(actuales.length)await guardarRegistros(actuales,false);}
+    if(fechaInput.value&&usuarioInput.value){const actuales=obtenerRegistros();if(actuales.length&&validarRegistros(actuales).length===0)await guardarRegistros(actuales,false);}
     productosSeleccionados=new Set(seleccionPendiente);
     await guardarSeleccion(fechaInput.value);
-    crearProductos();renderizarSelector();actualizarEstimaciones();
+    crearProductos();renderizarSelector();actualizarCalculos();
     productosControlToggle.setAttribute("aria-expanded","true");productosControlPanel.hidden=false;
     if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();}
     mostrarMensaje(`Selección guardada: ${productosSeleccionados.size} productos para ${fechaInput.value}. No se ha eliminado ningún registro.`,"success");
@@ -354,33 +403,94 @@ async function aplicarSeleccion(){
 }
 document.getElementById("aplicarSeleccion").addEventListener("click",aplicarSeleccion);
 
-async function guardarRegistros(registros,mostrar=true){
-  if(!registros.length){if(mostrar)mostrarMensaje("Introduce al menos un producto.","warning");return false;}
+/* ---------- Guardado ---------- */
+async function enviarRegistros(registros){
   const r=await fetch(API+"/registros?on_conflict=fecha,usuario_id,producto_id",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(registros)});
-  const body=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${body||"Error desconocido"}`);
+  const body=await r.text();
+  if(!r.ok)throw new Error(`HTTP ${r.status}: ${body||"Error desconocido"}`);
   let rows=[];try{rows=body?JSON.parse(body):[]}catch{}
   if(!Array.isArray(rows)||rows.length===0)throw new Error("Supabase no confirmó ninguna fila.");
-  if(mostrar)mostrarMensaje(`✓ Guardado correctamente: ${rows.length} producto${rows.length===1?"":"s"}.`,"success");return true;
+  return rows.length;
 }
-async function guardarControl(){
-  if(!fechaInput.value){mostrarMensaje("Selecciona una fecha.","warning");return;}
-  if(!usuarioInput.value){mostrarMensaje("Selecciona el usuario.","warning");return;}
-  const registros=obtenerRegistros();if(!registros.length){mostrarMensaje("Introduce al menos un producto.","warning");return;}
-  const boton=document.querySelector(".btn-primary:not(#aplicarSeleccion)");if(boton){boton.disabled=true;boton.textContent="GUARDANDO...";}
-  try{await guardarRegistros(registros,true);}
-  catch(e){console.error(e);mostrarMensaje("No se pudo guardar: "+e.message,"warning");}
-  finally{if(boton){boton.disabled=false;boton.textContent="GUARDAR CONTROL";}}
+function esErrorDeRed(e){return e instanceof TypeError||!navigator.onLine;}
+
+async function guardarRegistros(registros,mostrar=true){
+  if(!registros.length){if(mostrar)mostrarMensaje("Introduce al menos un producto.","warning");return false;}
+  try{
+    const n=await enviarRegistros(registros);
+    if(mostrar){
+      const extra=registrosExistentes>0?" Se han actualizado valores que ya existían para esta fecha y usuario.":"";
+      mostrarMensaje(`✓ Guardado correctamente: ${n} producto${n===1?"":"s"}.${extra}`,"success");
+    }
+    estado("guardado");
+    return true;
+  }catch(e){
+    if(esErrorDeRed(e)){
+      encolar(registros);
+      estado("pendiente");
+      if(mostrar)mostrarMensaje("Sin conexión. Los datos se han guardado en este dispositivo y se enviarán automáticamente.","warning");
+      return true;
+    }
+    throw e;
+  }
+}
+
+async function guardarControl(manual=false){
+  if(!fechaInput.value){if(manual)mostrarMensaje("Selecciona una fecha.","warning");return;}
+  if(!usuarioInput.value){if(manual)mostrarMensaje("Selecciona el usuario.","warning");return;}
+  const registros=obtenerRegistros();
+  if(!registros.length){if(manual)mostrarMensaje("Introduce al menos un producto.","warning");return;}
+  const errores=validarRegistros(registros);
+  if(errores.length){
+    estado("dirty");
+    mostrarMensaje("Revisa antes de guardar: "+errores.slice(0,3).join(" "),"warning");
+    return;
+  }
+  const boton=document.getElementById("guardarBtn");
+  boton.disabled=true;boton.textContent="GUARDANDO...";
+  estado("guardando");
+  try{
+    await guardarRegistros(registros,true);
+    vaciarCola();
+  }catch(e){
+    console.error(e);
+    estado("dirty");
+    mostrarMensaje("No se pudo guardar: "+e.message,"warning");
+  }finally{
+    boton.disabled=false;boton.textContent="GUARDAR CONTROL";
+  }
 }
 
 async function cambiarFecha(){
   clearTimeout(autoSaveTimer);
-  try{await cargarSeleccionParaFecha(fechaInput.value);renderizarSelector();crearProductos();productosControlToggle.setAttribute("aria-expanded","false");productosControlPanel.hidden=true;if(usuarioInput.value)await cargarControlExistente();else{actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}await cargarHistoricoEstimacion();}
-  catch(e){console.error(e);mostrarMensaje("No se pudo cargar la selección de esta fecha. Comprueba que la tabla selecciones_productos existe en Supabase. "+e.message,"warning");}
+  registrosExistentes=0;
+  estado("sin");
+  try{
+    await cargarSeleccionParaFecha(fechaInput.value);
+    renderizarSelector();
+    crearProductos();
+    productosControlToggle.setAttribute("aria-expanded","false");
+    productosControlPanel.hidden=true;
+    if(usuarioInput.value)await cargarControlExistente();
+    else{actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
+    await cargarTipoDia();
+  }catch(e){
+    console.error(e);
+    mostrarMensaje("No se pudo cargar la selección de esta fecha. Comprueba que la tabla selecciones_productos existe en Supabase. "+e.message,"warning");
+  }
 }
 fechaInput.addEventListener("change",cambiarFecha);
-usuarioInput.addEventListener("change",async()=>{await cargarControlExistente();await cargarHistoricoEstimacion();});
-function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
-function limpiarFormulario(){if(!confirm("¿Quieres limpiar los campos visibles? Esto solo limpia el formulario y no borra datos de la base de datos."))return;clearTimeout(autoSaveTimer);productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");actualizarProgreso();actualizarCalculos();document.getElementById("mensaje").style.display="none";}
+usuarioInput.addEventListener("change",async()=>{registrosExistentes=0;await cargarControlExistente();});
+
+function limpiarFormulario(){
+  if(!confirm("¿Quieres limpiar los campos visibles? Esto solo limpia el formulario y no borra datos de la base de datos."))return;
+  clearTimeout(autoSaveTimer);
+  productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
+  actualizarProgreso();actualizarCalculos();
+  document.getElementById("mensaje").style.display="none";
+  estado("sin");
+}
+
 cargarDatosIniciales();
 </script>
 </body>
