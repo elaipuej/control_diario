@@ -192,23 +192,27 @@ async function cargarPrevision(){
       const sd=Math.sqrt(valores.reduce((a,b)=>a+(b-media)**2,0)/valores.length);
       const forecast=Math.max(0,Math.round(estimacion));
       const margen=Math.max(1,sd);
-      const low=Math.max(0,Math.round(estimacion-margen));
-      const high=Math.max(low,Math.round(estimacion+margen));
+      const provisional=observaciones.length<4;
+      const low=provisional?null:Math.max(0,Math.round(estimacion-margen));
+      const high=provisional?null:Math.max(low,Math.round(estimacion+margen));
       let conf=usaHistorialGeneral?'🔴 Poco fiable*':'🔴 Poco fiable';
       if(!usaHistorialGeneral&&observaciones.length>=4&&sd<=Math.max(2,media*.35))conf='🟢 Fiable';
       else if(!usaHistorialGeneral&&observaciones.length>=3)conf='🟡 Orientativa';
       const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
       const sobrante=registrado?sobrantesPorProducto[pid]:0;
       const preparar=Math.max(0,forecast-sobrante);
-      return {id:pid,nombre:p.nombre,forecast,preparar,sobrante,sobranteRegistrado:registrado,low,high,conf,days:observaciones.length};
-    }).filter(x=>x.forecast!==null).sort((a,b)=>b.preparar-a.preparar);
+      return {id:pid,nombre:p.nombre,forecast,preparar,sobrante,sobranteRegistrado:registrado,low,high,provisional,conf,days:observaciones.length};
+    }).sort((a,b)=>(b.preparar??-1)-(a.preparar??-1));
 
+    const conEstimacion=rows.filter(x=>x.forecast!==null);
     $('forecastRows').innerHTML=rows.length
-      ?rows.map(x=>`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${x.forecast}</td><td>${x.sobranteRegistrado?x.sobrante:'—'}</td><td><strong>${x.preparar}</strong></td><td>${x.low}–${x.high}</td><td>${x.conf}</td><td>${x.days}</td></tr>`).join('')
-      :'<tr><td colspan="7" class="note">Todavía no hay al menos 2 registros del mismo día de la semana dentro de los últimos 120 días.</td></tr>';
-    $('forecastTotal').textContent=rows.length
-      ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${rows.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${rows.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. *Fiabilidad baja: se usó historial de otros días de la semana. Si no hay registro de sobrante hoy (—), se descuentan 0 unidades.`
-      :(productosPrevision.length===0?'No hay productos seleccionados para hoy. Abre Control Diario y guarda la selección de productos del día.':'Sin previsión disponible todavía. Se necesitan al menos 2 registros históricos del producto dentro de los últimos 120 días.');
+      ?rows.map(x=>x.forecast===null
+        ?`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td colspan="6" class="note">Sin estimación: hay ${x.days} registro(s) anterior(es) de este día de la semana; se necesitan al menos 2.</td></tr>`
+        :`<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${x.forecast}</td><td>${x.sobranteRegistrado?x.sobrante:'—'}</td><td><strong>${x.preparar}</strong></td><td>${x.provisional?'<span class="note">Provisional</span>':`${x.low}–${x.high}`}</td><td>${x.conf}</td><td>${x.days}</td></tr>`).join('')
+      :'<tr><td colspan="7" class="note">No hay productos seleccionados para previsión.</td></tr>';
+    $('forecastTotal').textContent=conEstimacion.length
+      ?`Previsión para ${fmtDate(fechaObjetivo)}: consumo estimado ${conEstimacion.reduce((a,x)=>a+x.forecast,0)} unidades; preparación recomendada ${conEstimacion.reduce((a,x)=>a+x.preparar,0)} unidades después de descontar sobrantes registrados hoy. Provisional: basada en 2 o 3 registros, sin rango todavía. *Fiabilidad baja: se usó historial de otros días de la semana. Si no hay registro de sobrante, se descuentan 0 unidades.`
+      :(productosPrevision.length===0?'No hay productos seleccionados para hoy. Abre Control Diario y guarda la selección de productos del día.':'Sin previsión disponible todavía. Se necesitan al menos 2 registros históricos del mismo día de la semana por producto.');
   }catch(e){
     console.error(e);
     $('forecastRows').innerHTML='<tr><td colspan="7" class="note">No se pudo calcular la previsión.</td></tr>';
