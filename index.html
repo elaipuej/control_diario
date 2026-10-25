@@ -54,7 +54,13 @@ button:disabled{opacity:.6;cursor:default}
 .selector-item{display:flex;align-items:center;gap:10px;padding:9px 7px;border-bottom:1px solid #edf1f4;font-size:13px}
 .selector-item:last-child{border-bottom:0}
 .selector-item input{width:18px;height:18px;flex:0 0 auto;margin:0}
-.selector-item span{flex:1}
+.selector-item span{flex:1;min-width:0}
+.selector-item-remove{width:auto;padding:7px 9px;background:#fff0f0;color:#9b2929;font-size:11px}
+.product-manager{border-top:1px solid #e2e9ee;margin-top:14px;padding-top:12px}
+.product-manager-form{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}
+.product-manager-form button{width:auto;padding:10px 14px}
+.product-manager-note{margin-top:7px}
+.product-manager-status{display:block}
 .selector-count{font-size:12px;color:#657786;margin-top:8px}
 .tools-card .tool-link{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:13px;margin-top:10px;font-weight:bold;background:#1976D2;color:#fff}
 @media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}}
@@ -92,6 +98,17 @@ button:disabled{opacity:.6;cursor:default}
     <div id="selectorLista" class="selector-list"></div>
     <div id="selectorCount" class="selector-count">0 productos seleccionados</div>
     <button type="button" class="btn-primary selector-apply" id="aplicarSeleccion" style="margin-top:10px">APLICAR SELECCIÓN</button>
+    <button type="button" class="btn-secondary selector-apply" id="generarExcel">GENERAR EXCEL (.XLSX)</button>
+    <div class="product-manager">
+      <div class="section-title">Gestionar catálogo de productos</div>
+      <div class="muted">Los cambios se guardan en la base de datos y afectan a todos los días. Al quitar un producto se conserva su historial.</div>
+      <form class="product-manager-form" id="nuevoProductoForm">
+        <input id="nuevoProductoNombre" type="text" maxlength="120" placeholder="Nombre del nuevo producto" aria-label="Nombre del nuevo producto" required>
+        <button type="submit" class="btn-primary" id="anadirProductoBtn">AÑADIR</button>
+      </form>
+      <div id="productManagerStatus" class="message product-manager-status" role="status" aria-live="polite"></div>
+      <div class="muted product-manager-note">Quita productos del catálogo con el botón junto a cada producto.</div>
+    </div>
   </div>
 </section>
 
@@ -150,6 +167,12 @@ function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(
 function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 async function supabaseGet(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||(`HTTP ${r.status}`));return r.json();}
 async function supabasePost(path, body){const r=await fetch(API+path,{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(body)});const txt=await r.text();if(!r.ok)throw new Error(txt||(`HTTP ${r.status}`));try{return txt?JSON.parse(txt):[];}catch{return [];}}
+async function supabaseRpc(name, body){
+  const r=await fetch(`${API}/rpc/${encodeURIComponent(name)}`,{method:"POST",headers:{...headers,"Prefer":"return=representation"},body:JSON.stringify(body)});
+  const txt=await r.text();
+  if(!r.ok)throw new Error(txt||(`HTTP ${r.status}`));
+  try{return txt?JSON.parse(txt):[];}catch{throw new Error("Supabase devolvió una respuesta no válida.");}
+}
 function mostrarMensaje(t,tipo){const m=document.getElementById("mensaje");m.textContent=t;m.className="message "+tipo;m.style.display="block";}
 
 /* ---------- Estado de guardado ---------- */
@@ -250,15 +273,92 @@ function renderizarSelector(){
   const filtro=(selectorSearch.value||"").trim().toLocaleLowerCase("es");
   selectorLista.innerHTML="";
   PRODUCTOS.filter(p=>String(p.nombre).toLocaleLowerCase("es").includes(filtro)).forEach(p=>{
-    const label=document.createElement("label");label.className="selector-item";
+    const label=document.createElement("div");label.className="selector-item";
     const check=document.createElement("input");check.type="checkbox";check.checked=seleccionPendiente.has(String(p.id));check.dataset.selectorProducto=String(p.id);
     check.addEventListener("change",()=>{if(check.checked)seleccionPendiente.add(String(p.id));else seleccionPendiente.delete(String(p.id));actualizarContadorSelector();});
     const name=document.createElement("span");name.textContent=p.nombre;
-    label.append(check,name);selectorLista.appendChild(label);
+    const remove=document.createElement("button");remove.type="button";remove.className="selector-item-remove";remove.textContent="Quitar";remove.setAttribute("aria-label",`Quitar ${p.nombre} del catálogo`);
+    remove.dataset.removeProducto=String(p.id);
+    remove.addEventListener("click",()=>quitarProducto(p.id));
+    label.append(check,name,remove);selectorLista.appendChild(label);
   });
   actualizarContadorSelector();
 }
 function actualizarContadorSelector(){document.getElementById("selectorCount").textContent=`${seleccionPendiente.size} de ${PRODUCTOS.length} productos seleccionados`;}
+function mostrarEstadoGestionCatalogo(texto,tipo){
+  const estado=document.getElementById("productManagerStatus");
+  estado.textContent=texto;
+  estado.className=`message product-manager-status ${tipo}`;
+}
+async function anadirProducto(nombre){
+  const nombreNormalizado=nombre.trim();
+  if(!nombreNormalizado){mostrarEstadoGestionCatalogo("Escribe el nombre del producto.","warning");return;}
+  if(PRODUCTOS.some(p=>String(p.nombre).trim().toLocaleLowerCase("es")===nombreNormalizado.toLocaleLowerCase("es"))){
+    mostrarEstadoGestionCatalogo("Ya existe un producto activo con ese nombre.","warning");return;
+  }
+  const boton=document.getElementById("anadirProductoBtn");boton.disabled=true;
+  try{
+    const rows=await supabaseRpc("agregar_producto",{p_nombre:nombreNormalizado});
+    const productoGuardado=Array.isArray(rows)?rows.find(p=>p.id!==undefined):null;
+    if(!productoGuardado)throw new Error("Supabase no confirmó la creación del producto.");
+    PRODUCTOS.push(productoGuardado);
+    PRODUCTOS.sort((a,b)=>(Number(a.orden)||0)-(Number(b.orden)||0));
+    seleccionPendiente.add(String(productoGuardado.id));
+    document.getElementById("nuevoProductoNombre").value="";
+    renderizarSelector();
+    const texto=`Producto "${productoGuardado.nombre}" guardado en la base de datos. Pulsa APLICAR SELECCIÓN para incluirlo en este día.`;
+    mostrarEstadoGestionCatalogo(texto,"success");
+    mostrarMensaje(texto,"success");
+  }catch(e){
+    console.error(e);
+    const texto="No se pudo añadir el producto: "+e.message;
+    mostrarEstadoGestionCatalogo(texto,"warning");
+    mostrarMensaje(texto,"warning");
+  }finally{boton.disabled=false;}
+}
+async function quitarProducto(id){
+  const producto=PRODUCTOS.find(p=>String(p.id)===String(id));
+  if(!producto)return;
+  if(!confirm(`¿Quitar "${producto.nombre}" del catálogo activo? Se conservarán los registros históricos.`))return;
+  const boton=Array.from(selectorLista.querySelectorAll("button")).find(button=>button.dataset.removeProducto===String(id));
+  if(boton)boton.disabled=true;
+  try{
+    clearTimeout(autoSaveTimer);
+    const actuales=obtenerRegistros();
+    if(actuales.length){
+      if(!fechaInput.value||!usuarioInput.value)throw new Error("Selecciona la fecha y el usuario antes de quitar un producto con datos sin guardar.");
+      const errores=validarRegistros(actuales);
+      if(errores.length)throw new Error("Guarda o corrige primero los datos actuales: "+errores.slice(0,3).join(" "));
+      await guardarRegistros(actuales,false);
+    }
+    const rows=await supabaseRpc("quitar_producto",{p_producto_id:id});
+    if(!Array.isArray(rows)||!rows.length)throw new Error("Supabase no confirmó que el producto se quitara del catálogo.");
+    PRODUCTOS=PRODUCTOS.filter(p=>String(p.id)!==String(id));
+    seleccionPendiente.delete(String(id));
+    productosSeleccionados.delete(String(id));
+    renderizarSelector();
+    const tarjeta=Array.from(productosContainer.querySelectorAll("[data-product-card]")).find(card=>card.dataset.productCard===String(id));
+    if(tarjeta)tarjeta.remove();
+    const restantes=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+    productosControlTitulo.textContent=`Productos del control (${restantes.length})`;
+    if(!restantes.length)productosContainer.innerHTML='<div class="muted">No hay productos seleccionados para esta fecha. Abre “Seleccionar productos del día” para elegirlos.</div>';
+    actualizarProgreso();
+    actualizarCalculos();
+    const texto=`"${producto.nombre}" se ha quitado del catálogo activo. Sus registros históricos se conservan.`;
+    mostrarEstadoGestionCatalogo(texto,"success");
+    mostrarMensaje(texto,"success");
+  }catch(e){
+    console.error(e);
+    const texto="No se pudo quitar el producto: "+e.message;
+    mostrarEstadoGestionCatalogo(texto,"warning");
+    mostrarMensaje(texto,"warning");
+    if(boton)boton.disabled=false;
+  }
+}
+document.getElementById("nuevoProductoForm").addEventListener("submit",event=>{
+  event.preventDefault();
+  anadirProducto(document.getElementById("nuevoProductoNombre").value);
+});
 selectorSearch.addEventListener("input",renderizarSelector);
 document.getElementById("seleccionarTodos").addEventListener("click",()=>{PRODUCTOS.forEach(p=>seleccionPendiente.add(String(p.id)));renderizarSelector();});
 document.getElementById("desmarcarTodos").addEventListener("click",()=>{seleccionPendiente.clear();renderizarSelector();});
@@ -403,6 +503,73 @@ async function aplicarSeleccion(){
 }
 document.getElementById("aplicarSeleccion").addEventListener("click",aplicarSeleccion);
 
+function generarExcel(){
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+  if(!lista.length){mostrarMensaje("Selecciona al menos un producto para generar el Excel.","warning");return;}
+  if(!window.ExcelJS){mostrarMensaje("No se pudo cargar la herramienta para generar Excel. Comprueba tu conexión e inténtalo de nuevo.","warning");return;}
+  try{
+    const [year,month,day]=fechaInput.value.split("-").map(Number);
+    const fecha=new Date(Date.UTC(year,month-1,day));
+    const diaSemana=new Intl.DateTimeFormat("en-US",{weekday:"long"}).format(fecha);
+    const fechaEnEspanol=new Intl.DateTimeFormat("es-ES",{day:"numeric",month:"long",year:"numeric"}).format(fecha);
+    const libro=new ExcelJS.Workbook();
+    const hoja=libro.addWorksheet("Control diario",{
+      pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:`A1:E${lista.length+2}`,margins:{left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2}}
+    });
+    hoja.columns=[{width:38},{width:16},{width:16},{width:16},{width:16}];
+    hoja.mergeCells("A1:E1");
+    const titulo=hoja.getCell("A1");
+    titulo.value=`CONTROL DIARIO — ${diaSemana} ${fechaEnEspanol}`;
+    titulo.font={name:"Arial",size:14,bold:true};
+    titulo.alignment={horizontal:"center",vertical:"middle"};
+    hoja.getRow(1).height=30;
+    const encabezados=["PRODUCTOS","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
+    const bordeTabla={style:"thin",color:{argb:"FFB7B7B7"}};
+    const estiloBordes={top:bordeTabla,left:bordeTabla,bottom:bordeTabla,right:bordeTabla};
+    const filas=lista.map(p=>{
+      const obtenerCampo=campo=>{
+        const input=document.querySelector(`[data-producto="${p.id}"][data-campo="${campo}"]`);
+        return input&&input.value!==""?Number(input.value):"";
+      };
+      return [p.nombre,obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma")];
+    });
+    const filaEncabezados=hoja.addRow(encabezados);
+    filaEncabezados.height=22;
+    filaEncabezados.eachCell(cell=>{
+      cell.font={name:"Arial",size:11,bold:true};
+      cell.alignment={horizontal:"center",vertical:"middle"};
+      cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9EAF7"}};
+      cell.border=estiloBordes;
+    });
+    filas.forEach(valores=>{
+      const fila=hoja.addRow(valores);
+      fila.height=20;
+      fila.eachCell((cell,columna)=>{
+        cell.font={name:"Arial",size:11};
+        cell.alignment={horizontal:columna===1?"left":"center",vertical:"middle"};
+        cell.border=estiloBordes;
+      });
+    });
+    libro.xlsx.writeBuffer().then(buffer=>{
+      const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url=URL.createObjectURL(blob);
+      const enlace=document.createElement("a");
+      enlace.href=url;
+      enlace.download=`control_diario_${fechaInput.value||fechaLocalISO()}.xlsx`;
+      enlace.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      mostrarMensaje(`Excel generado correctamente con ${lista.length} productos seleccionados.`,"success");
+    }).catch(e=>{
+      console.error(e);
+      mostrarMensaje("No se pudo generar el Excel: "+e.message,"warning");
+    });
+  }catch(e){
+    console.error(e);
+    mostrarMensaje("No se pudo generar el Excel: "+e.message,"warning");
+  }
+}
+document.getElementById("generarExcel").addEventListener("click",generarExcel);
+
 /* ---------- Guardado ---------- */
 async function enviarRegistros(registros){
   const r=await fetch(API+"/registros?on_conflict=fecha,usuario_id,producto_id",{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(registros)});
@@ -493,5 +660,6 @@ function limpiarFormulario(){
 
 cargarDatosIniciales();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </body>
 </html>
