@@ -30,6 +30,17 @@ button:disabled{opacity:.6;cursor:default}
 .product{border:1px solid #e2e9ee;border-left:6px solid var(--category-color,#e2e9ee);border-radius:12px;padding:13px;margin-bottom:10px}
 .product-name{font-weight:bold;font-size:14px;margin-bottom:10px}
 .product-category{display:inline-block;font-size:10px;color:var(--category-text,#657786);background:var(--category-bg,#edf1f4);font-weight:bold;margin-top:4px;padding:3px 8px;border-radius:999px}
+.photo-loader{border-top:1px solid #e2e9ee;margin-bottom:12px;padding-top:12px}
+.photo-preview{display:block;width:100%;max-height:320px;object-fit:contain;margin-top:10px;border:1px solid #e2e9ee;border-radius:10px;background:#f7fafc}
+.photo-status{margin-top:8px;font-size:12px;line-height:1.4}
+.photo-status.success{color:#19724a}
+.photo-status.warning{color:#8a5a00}
+.photo-status[hidden],.photo-preview[hidden]{display:none}
+.photo-pending{background:#fff4df;color:#8a5a00;padding:10px;border-radius:10px;margin-bottom:10px;font-size:12px}
+.photo-pending[hidden]{display:none}
+.ocr-low-confidence{border-color:#d58b00!important;background:#fff9e8!important}
+.photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.photo-actions button{min-height:44px}
 .fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}
 .fields input{padding:9px 5px}
@@ -140,7 +151,22 @@ button:disabled{opacity:.6;cursor:default}
   <button type="button" class="selector-toggle" id="productosControlToggle" aria-expanded="false" aria-controls="productosControlPanel">
     <span id="productosControlTitulo">Productos del control</span><span class="chevron" aria-hidden="true">⌄</span>
   </button>
-  <div id="productosControlPanel" class="selector-panel" hidden><div id="productos"></div></div>
+  <div id="productosControlPanel" class="selector-panel" hidden>
+    <div class="photo-loader">
+      <div class="section-title">Cargar datos desde una foto</div>
+      <div class="muted">Fotografía la hoja impresa. El reconocimiento se procesa en este navegador; revisa los campos y pulsa GUARDAR CONTROL. La imagen no se envía a Supabase.</div>
+      <label for="fotoControl">Foto de la hoja de control</label>
+      <input id="fotoControl" type="file" accept="image/*" capture="environment">
+      <img id="fotoControlPreview" class="photo-preview" alt="Vista previa de la hoja fotografiada" hidden>
+      <div class="photo-actions">
+        <button type="button" class="btn-primary" id="leerFotoBtn" disabled>LEER FOTO</button>
+        <button type="button" class="btn-secondary" id="limpiarFotoBtn" disabled>QUITAR FOTO</button>
+      </div>
+      <div id="fotoControlEstado" class="photo-status" role="status" aria-live="polite" hidden></div>
+    </div>
+    <div id="fotoDatosPendientes" class="photo-pending" hidden>Datos cargados desde una foto: comprueba los valores y pulsa GUARDAR CONTROL. El autoguardado está pausado para estos datos.</div>
+    <div id="productos"></div>
+  </div>
 </section>
 
 <section class="card">
@@ -178,6 +204,13 @@ let fechaSeleccionCargada = null;
 let autoSaveTimer = null;
 let aplicandoCambios = false;
 let registrosExistentes = 0;
+let fotoControlArchivo = null;
+let fotoControlUrl = null;
+let datosFotoPendientes = false;
+let fechaBorradorFoto = null;
+let usuarioBorradorFoto = null;
+let workerOCR = null;
+let scriptOCRPromise = null;
 const fechaInput = document.getElementById("fecha");
 const tipoDiaInput = document.getElementById("tipoDia");
 const usuarioInput = document.getElementById("usuario");
@@ -463,6 +496,10 @@ async function anadirProducto(nombre,categoria){
   }finally{boton.disabled=false;}
 }
 async function quitarProducto(id){
+  if(datosFotoPendientes){
+    mostrarMensaje("Guarda primero los datos reconocidos con GUARDAR CONTROL antes de quitar productos del catálogo.","warning");
+    return;
+  }
   const producto=PRODUCTOS.find(p=>String(p.id)===String(id));
   if(!producto)return;
   if(!confirm(`¿Quitar "${producto.nombre}" del catálogo activo? Se conservarán los registros históricos.`))return;
@@ -558,6 +595,259 @@ function crearProductos(){
   });
 }
 
+function mostrarEstadoFoto(texto,tipo="info"){
+  const estado=document.getElementById("fotoControlEstado");
+  estado.textContent=texto;
+  estado.className=`photo-status ${tipo}`;
+  estado.hidden=false;
+}
+function establecerBorradorFoto(activo){
+  datosFotoPendientes=activo;
+  document.getElementById("fotoDatosPendientes").hidden=!activo;
+  if(!activo){
+    fechaBorradorFoto=null;usuarioBorradorFoto=null;
+    productosContainer.querySelectorAll(".ocr-low-confidence").forEach(input=>{
+      input.classList.remove("ocr-low-confidence");
+      input.removeAttribute("title");
+    });
+  }
+}
+function normalizarOCR(texto){
+  return String(texto||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+}
+function distanciaTexto(a,b){
+  const fila=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    let diagonal=fila[0];
+    fila[0]=i;
+    for(let j=1;j<=b.length;j++){
+      const anterior=fila[j];
+      fila[j]=Math.min(fila[j]+1,fila[j-1]+1,diagonal+(a[i-1]===b[j-1]?0:1));
+      diagonal=anterior;
+    }
+  }
+  return fila[b.length];
+}
+function agruparPalabrasOCR(palabras){
+  const grupos=new Map();
+  palabras.filter(w=>w.text&&w.bbox&&Number(w.confidence??0)>=15).forEach(w=>{
+    const b=w.bbox;
+    const key=[w.block_num??0,w.par_num??0,w.line_num??Math.round((b.y0+b.y1)/18)].join(":");
+    if(!grupos.has(key))grupos.set(key,[]);
+    grupos.get(key).push(w);
+  });
+  return [...grupos.values()].map(words=>{
+    words.sort((a,b)=>a.bbox.x0-b.bbox.x0);
+    return {words,text:words.map(w=>w.text).join(" "),y:words.reduce((sum,w)=>sum+(w.bbox.y0+w.bbox.y1)/2,0)/words.length};
+  }).sort((a,b)=>a.y-b.y);
+}
+function puntuacionNombreProducto(nombre,linea){
+  const esperados=String(nombre).split(/\s+/).map(normalizarOCR).filter(token=>token.length>1);
+  const encontrados=linea.words.map(w=>normalizarOCR(w.text)).filter(Boolean);
+  if(!esperados.length)return 0;
+  const coincidencias=esperados.filter(esperado=>encontrados.some(encontrado=>{
+    if(esperado===encontrado)return true;
+    if(Math.min(esperado.length,encontrado.length)<4)return false;
+    return 1-distanciaTexto(esperado,encontrado)/Math.max(esperado.length,encontrado.length)>=0.72;
+  })).length;
+  return coincidencias/esperados.length;
+}
+function obtenerFilasProductoOCR(lineas,productos){
+  const encabezados=new Set(["productos","inicial","reposicion","sobrante","merma"]);
+  const candidatas=lineas.filter(linea=>!linea.words.some(w=>encabezados.has(normalizarOCR(w.text))));
+  const usadas=new Set(),anclas=[];
+  candidatas.forEach(linea=>{
+    const resultados=productos.map((producto,index)=>({index,score:puntuacionNombreProducto(producto.nombre,linea)}))
+      .filter(x=>!usadas.has(x.index)).sort((a,b)=>b.score-a.score);
+    const mejor=resultados[0],segundo=resultados[1];
+    if(mejor&&mejor.score>=0.5&&(!segundo||mejor.score-segundo.score>=0.08)){
+      usadas.add(mejor.index);
+      anclas.push({index:mejor.index,y:linea.y});
+    }
+  });
+  anclas.sort((a,b)=>a.index-b.index);
+  const umbral=1;
+  if(anclas.length<umbral)throw new Error(`Solo se reconocieron ${anclas.length} de ${productos.length} nombres de producto. Toma la foto de frente, con buena luz y toda la hoja visible.`);
+  for(let i=1;i<anclas.length;i++){
+    if(anclas[i].y<=anclas[i-1].y)throw new Error("No se pudo identificar con seguridad el orden de las filas. Comprueba que la hoja no esté girada ni inclinada.");
+  }
+  const separaciones=[];
+  for(let i=1;i<anclas.length;i++)separaciones.push((anclas[i].y-anclas[i-1].y)/(anclas[i].index-anclas[i-1].index));
+  const paso=separaciones.length?separaciones.sort((a,b)=>a-b)[Math.floor(separaciones.length/2)]:28;
+  const centros=[];
+  for(let index=0;index<productos.length;index++){
+    const antes=[...anclas].reverse().find(a=>a.index<=index);
+    const despues=anclas.find(a=>a.index>=index);
+    if(antes&&despues){
+      centros[index]=antes.index===despues.index?antes.y:antes.y+(despues.y-antes.y)*(index-antes.index)/(despues.index-antes.index);
+    }else if(antes)centros[index]=antes.y+(index-antes.index)*paso;
+    else centros[index]=despues.y-(despues.index-index)*paso;
+  }
+  return {anclas,centros,paso};
+}
+function analizarCeldasOCR(palabras,productos){
+  const validas=palabras.filter(w=>w.text&&w.bbox&&Number(w.confidence??0)>=15);
+  const lineas=agruparPalabrasOCR(validas);
+  const nombresCampos=["inicial","reposicion","sobrante","merma"];
+  const centrosColumnas={};
+  nombresCampos.forEach(campo=>{
+    const header=validas.find(w=>normalizarOCR(w.text)===normalizarOCR(campo));
+    if(header)centrosColumnas[campo]=(header.bbox.x0+header.bbox.x1)/2;
+  });
+  if(nombresCampos.some(campo=>centrosColumnas[campo]===undefined)){
+    throw new Error("No se reconocieron todas las cabeceras numéricas. Asegúrate de que la hoja impresa esté enfocada y completamente visible.");
+  }
+  const xs=nombresCampos.map(campo=>centrosColumnas[campo]);
+  if(xs.some((x,i)=>i>0&&x<=xs[i-1]))throw new Error("Las columnas no se reconocieron en el orden esperado.");
+  const {anclas,centros,paso}=obtenerFilasProductoOCR(lineas,productos);
+  const indicesReconocidos=new Set(anclas.map(ancla=>ancla.index));
+  const celdas=productos.map(()=>Object.fromEntries(nombresCampos.map(campo=>[campo,null])));
+  const numeros=validas.map(w=>{
+    const normalizado=w.text.replace(/[oO]/g,"0").replace(/[Il|]/g,"1").replace(/[,.:]$/g,"");
+    if(!/^\d+$/.test(normalizado))return null;
+    return {...w,valor:normalizado,x:(w.bbox.x0+w.bbox.x1)/2,y:(w.bbox.y0+w.bbox.y1)/2};
+  }).filter(Boolean);
+  numeros.forEach(word=>{
+    const col=nombresCampos.reduce((best,campo)=>Math.abs(centrosColumnas[campo]-word.x)<Math.abs(centrosColumnas[best]-word.x)?campo:best,nombresCampos[0]);
+    const colIndex=nombresCampos.indexOf(col);
+    const limiteCol=colIndex===0
+      ?(centrosColumnas[nombresCampos[1]]-centrosColumnas[col])/2
+      :(colIndex===nombresCampos.length-1
+        ?(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]])/2
+        :Math.min(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]],centrosColumnas[nombresCampos[colIndex+1]]-centrosColumnas[col])/2);
+    if(Math.abs(centrosColumnas[col]-word.x)>limiteCol)return;
+    let row=0;
+    for(let i=1;i<centros.length;i++)if(Math.abs(centros[i]-word.y)<Math.abs(centros[row]-word.y))row=i;
+    const rowLimit=Math.max(8,paso*0.62);
+    if(!indicesReconocidos.has(row)||Math.abs(centros[row]-word.y)>rowLimit)return;
+    const celda=celdas[row][col];
+    if(!celda)celdas[row][col]={valor:word.valor,confianza:Number(word.confidence??0),x:word.x};
+    else{
+      const palabrasCelda=[celda,{valor:word.valor,confianza:Number(word.confidence??0),x:word.x}].sort((a,b)=>a.x-b.x);
+      celdas[row][col]={valor:palabrasCelda.map(x=>x.valor).join(""),confianza:Math.min(...palabrasCelda.map(x=>x.confianza)),x:palabrasCelda[0].x};
+    }
+  });
+  const cantidad=celdas.reduce((total,row)=>total+Object.values(row).filter(Boolean).length,0);
+  if(!cantidad)throw new Error("No se detectaron números escritos en la tabla. Puedes introducirlos manualmente.");
+  return {celdas,cantidad,indicesReconocidos:[...indicesReconocidos]};
+}
+function cargarScriptOCR(){
+  if(window.Tesseract)return Promise.resolve(window.Tesseract);
+  if(scriptOCRPromise)return scriptOCRPromise;
+  scriptOCRPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+    script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error("No se pudo iniciar el reconocimiento de texto."));
+    script.onerror=()=>{
+      scriptOCRPromise=null;
+      reject(new Error("No se pudo descargar el motor OCR. Comprueba la conexión e inténtalo de nuevo."));
+    };
+    document.head.appendChild(script);
+  });
+  return scriptOCRPromise;
+}
+async function imagenParaOCR(file){
+  let bitmap;
+  if(window.createImageBitmap)bitmap=await createImageBitmap(file);
+  else{
+    const url=URL.createObjectURL(file);
+    bitmap=await new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.onload=()=>resolve(img);
+      img.onerror=()=>reject(new Error("No se pudo abrir la imagen."));
+      img.src=url;
+    });
+  }
+  const escala=Math.min(1,2400/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.round(bitmap.width*escala);canvas.height=Math.round(bitmap.height*escala);
+  const ctx=canvas.getContext("2d");
+  if(!ctx)throw new Error("No se pudo preparar la imagen para el reconocimiento.");
+  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  if(bitmap.close)bitmap.close();
+  return canvas;
+}
+async function leerFotoControl(){
+  if(!fotoControlArchivo){mostrarEstadoFoto("Selecciona o toma primero una foto.","warning");return;}
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+  if(!lista.length){mostrarEstadoFoto("Selecciona los productos de la hoja antes de leerla.","warning");return;}
+  const boton=document.getElementById("leerFotoBtn");
+  boton.disabled=true;boton.textContent="LEYENDO FOTO…";
+  try{
+    mostrarEstadoFoto("Preparando la foto para reconocer la hoja…");
+    const canvas=await imagenParaOCR(fotoControlArchivo);
+    const Tesseract=await cargarScriptOCR();
+    if(!workerOCR){
+      workerOCR=await Tesseract.createWorker("spa",1,{
+        workerPath:"https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+        langPath:"https://tessdata.projectnaptha.com/4.0.0",
+        logger:info=>{
+          if(info.status==="recognizing text")mostrarEstadoFoto(`Reconociendo texto: ${Math.round((info.progress||0)*100)}%`);
+          else if(info.status)mostrarEstadoFoto(`Preparando reconocimiento en este dispositivo: ${info.status}…`);
+        }
+      });
+      await workerOCR.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1"});
+    }
+    const resultado=await workerOCR.recognize(canvas);
+    const analisis=analizarCeldasOCR(resultado.data.words||[],lista);
+    const productosReconocidos=analisis.indicesReconocidos.map(index=>lista[index]);
+    const idsReconocidos=new Set(productosReconocidos.map(p=>String(p.id)));
+    const entradasReconocidas=Array.from(productosContainer.querySelectorAll('input[type="number"][data-producto]'))
+      .filter(input=>idsReconocidos.has(input.dataset.producto));
+    const hayValores=entradasReconocidas.some(input=>input.value!=="");
+    if(hayValores&&!confirm("Leer esta foto reemplazará los valores actuales de los productos reconocidos en ella. ¿Continuar?")){
+      mostrarEstadoFoto("Lectura cancelada. No se modificaron los valores del formulario.");
+      return;
+    }
+    clearTimeout(autoSaveTimer);
+    entradasReconocidas.forEach(input=>{input.value="";input.classList.remove("ocr-low-confidence");input.removeAttribute("title");});
+    analisis.indicesReconocidos.forEach(index=>{
+      const fila=analisis.celdas[index];
+      const producto=lista[index];
+      Object.entries(fila).forEach(([campo,dato])=>{
+        if(!dato)return;
+        const input=productosContainer.querySelector(`[data-producto="${producto.id}"][data-campo="${campo}"]`);
+        if(!input)return;
+        input.value=dato.valor;
+        if(dato.confianza<55){
+          input.classList.add("ocr-low-confidence");
+          input.title=`Reconocimiento con confianza baja (${Math.round(dato.confianza)}%). Comprueba este valor.`;
+        }
+      });
+    });
+    establecerBorradorFoto(true);
+    fechaBorradorFoto=fechaInput.value;
+    usuarioBorradorFoto=usuarioInput.value;
+    actualizarProgreso();actualizarCalculos();estado("dirty");
+    const dudosos=Array.from(productosContainer.querySelectorAll(".ocr-low-confidence")).length;
+    mostrarEstadoFoto(`Se detectaron ${analisis.cantidad} valores en ${productosReconocidos.length} producto(s). Si la hoja tiene más páginas, carga cada foto por separado; los datos de las páginas anteriores se conservan. ${dudosos?`${dudosos} valores tienen confianza baja (marcados en amarillo). `:""}Revisa los datos y pulsa GUARDAR CONTROL.`,dudosos?"warning":"success");
+  }catch(e){
+    console.error(e);
+    mostrarEstadoFoto("No se pudieron leer los datos: "+e.message,"warning");
+  }finally{
+    boton.disabled=!fotoControlArchivo;
+    boton.textContent="LEER FOTO";
+  }
+}
+function confirmarCambioBorradorFoto(){
+  if(!datosFotoPendientes)return true;
+  if(!confirm("Los datos reconocidos aún no se han guardado. ¿Descartarlos y cambiar de fecha o usuario?"))return false;
+  establecerBorradorFoto(false);
+  if(fotoControlArchivo)quitarFotoControl();
+  return true;
+}
+function quitarFotoControl(){
+  const input=document.getElementById("fotoControl");
+  input.value="";
+  fotoControlArchivo=null;
+  document.getElementById("leerFotoBtn").disabled=true;
+  document.getElementById("limpiarFotoBtn").disabled=true;
+  const preview=document.getElementById("fotoControlPreview");
+  preview.removeAttribute("src");preview.hidden=true;
+  if(fotoControlUrl){URL.revokeObjectURL(fotoControlUrl);fotoControlUrl=null;}
+  mostrarEstadoFoto(datosFotoPendientes?"La foto se quitó de la vista. Los datos reconocidos siguen pendientes de guardar.":"Foto quitada.");
+}
+
 function calcularProducto(id){
   const get=c=>{const el=document.querySelector(`[data-producto="${id}"][data-campo="${c}"]`);return el?Number(el.value)||0:0;};
   const inicial=get("inicial"), reposicion=get("reposicion"), sobrante=get("sobrante"), merma=get("merma");
@@ -592,10 +882,38 @@ document.addEventListener("input",(e)=>{
   if(e.target.matches('input[type="number"][data-producto]')){
     actualizarProgreso();actualizarCalculos();estado("dirty");
     clearTimeout(autoSaveTimer);
+    if(datosFotoPendientes){
+      mostrarEstadoFoto("Hay datos de la foto pendientes. Compruébalos y pulsa GUARDAR CONTROL.");
+      return;
+    }
     autoSaveTimer=setTimeout(()=>{if(fechaInput.value&&usuarioInput.value)guardarControl(false);},700);
   }
 });
 tipoDiaInput.addEventListener("change",guardarTipoDia);
+document.getElementById("fotoControl").addEventListener("change",event=>{
+  const archivo=event.target.files?.[0];
+  if(!archivo){quitarFotoControl();return;}
+  if(!archivo.type.startsWith("image/")){
+    event.target.value="";
+    mostrarEstadoFoto("Selecciona un archivo de imagen válido.","warning");
+    return;
+  }
+  if(archivo.size>15*1024*1024){
+    event.target.value="";
+    mostrarEstadoFoto("La foto supera 15 MB. Reduce su tamaño o toma una imagen con menor resolución.","warning");
+    return;
+  }
+  if(fotoControlUrl)URL.revokeObjectURL(fotoControlUrl);
+  fotoControlArchivo=archivo;
+  fotoControlUrl=URL.createObjectURL(archivo);
+  const preview=document.getElementById("fotoControlPreview");
+  preview.src=fotoControlUrl;preview.hidden=false;
+  document.getElementById("leerFotoBtn").disabled=false;
+  document.getElementById("limpiarFotoBtn").disabled=false;
+  mostrarEstadoFoto("Foto lista. Procura que se vea la hoja completa, de frente y con buena luz.");
+});
+document.getElementById("leerFotoBtn").addEventListener("click",leerFotoControl);
+document.getElementById("limpiarFotoBtn").addEventListener("click",quitarFotoControl);
 
 function obtenerRegistros(){
   const fecha=fechaInput.value,usuarioId=Number(usuarioInput.value),out=[];
@@ -637,6 +955,10 @@ async function cargarControlExistente(){
 }
 
 async function aplicarSeleccion(){
+  if(datosFotoPendientes){
+    mostrarMensaje("Guarda primero los datos reconocidos con GUARDAR CONTROL antes de cambiar la selección.","warning");
+    return;
+  }
   if(aplicandoCambios)return;aplicandoCambios=true;clearTimeout(autoSaveTimer);
   const boton=document.getElementById("aplicarSeleccion");boton.disabled=true;boton.textContent="APLICANDO...";
   try{
@@ -658,22 +980,23 @@ function generarExcel(){
   if(!lista.length){mostrarMensaje("Selecciona al menos un producto para generar el Excel.","warning");return;}
   if(!window.ExcelJS){mostrarMensaje("No se pudo cargar la herramienta para generar Excel. Comprueba tu conexión e inténtalo de nuevo.","warning");return;}
   try{
-    const [year,month,day]=fechaInput.value.split("-").map(Number);
-    const fecha=new Date(Date.UTC(year,month-1,day));
-    const diaSemana=new Intl.DateTimeFormat("en-US",{weekday:"long"}).format(fecha);
-    const fechaEnEspanol=new Intl.DateTimeFormat("es-ES",{day:"numeric",month:"long",year:"numeric"}).format(fecha);
     const libro=new ExcelJS.Workbook();
+    const anchoPaginaCm=21-1.5*2;
+    const anchoMaximoPuntos=anchoPaginaCm/2.54*72;
+    const anchoProducto=34,anchoCategoria=18,anchoNumero=12;
+    const anchoColumnaPuntos=ancho=>((ancho*7+5)*72)/96;
+    const incluirCategoria=anchoColumnaPuntos(anchoProducto)+anchoColumnaPuntos(anchoCategoria)+4*anchoColumnaPuntos(anchoNumero)<=anchoMaximoPuntos;
+    const columnas=incluirCategoria
+      ?[{width:anchoProducto},{width:anchoCategoria},...Array.from({length:4},()=>({width:anchoNumero}))]
+      :[{width:anchoProducto},...Array.from({length:4},()=>({width:anchoNumero}))];
+    const ultimaColumna=incluirCategoria?"F":"E";
     const hoja=libro.addWorksheet("Control diario",{
-      pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:`A1:F${lista.length+2}`,margins:{left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2}}
+      pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:1,printArea:`A1:${ultimaColumna}${lista.length+1}`,margins:{left:1.5/2.54,right:1.5/2.54,top:1.5/2.54,bottom:1.5/2.54,header:0,footer:0}}
     });
-    hoja.columns=[{width:38},{width:25},{width:16},{width:16},{width:16},{width:16}];
-    hoja.mergeCells("A1:F1");
-    const titulo=hoja.getCell("A1");
-    titulo.value=`CONTROL DIARIO — ${diaSemana} ${fechaEnEspanol}`;
-    titulo.font={name:"Arial",size:14,bold:true};
-    titulo.alignment={horizontal:"center",vertical:"middle"};
-    hoja.getRow(1).height=30;
-    const encabezados=["PRODUCTOS","CATEGORÍA","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
+    hoja.columns=columnas;
+    const encabezados=incluirCategoria
+      ?["PRODUCTOS","CATEGORÍA","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"]
+      :["PRODUCTOS","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
     const bordeTabla={style:"thin",color:{argb:"FFB7B7B7"}};
     const estiloBordes={top:bordeTabla,left:bordeTabla,bottom:bordeTabla,right:bordeTabla};
     const filas=lista.map(p=>{
@@ -681,7 +1004,10 @@ function generarExcel(){
         const input=document.querySelector(`[data-producto="${p.id}"][data-campo="${campo}"]`);
         return input&&input.value!==""?Number(input.value):"";
       };
-      return [p.nombre,categoriaProducto(p),obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma")];
+      const valores=[p.nombre];
+      if(incluirCategoria)valores.push(categoriaProducto(p));
+      valores.push(obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma"));
+      return valores;
     });
     const filaEncabezados=hoja.addRow(encabezados);
     filaEncabezados.height=22;
@@ -767,7 +1093,10 @@ async function guardarControl(manual=false){
   boton.disabled=true;boton.textContent="GUARDANDO...";
   estado("guardando");
   try{
-    await guardarRegistros(registros,true);
+    const guardado=await guardarRegistros(registros,true);
+    if(!guardado)return;
+    establecerBorradorFoto(false);
+    if(fotoControlArchivo)mostrarEstadoFoto("Control guardado. Puedes quitar la foto cuando quieras.","success");
     vaciarCola();
   }catch(e){
     console.error(e);
@@ -779,6 +1108,11 @@ async function guardarControl(manual=false){
 }
 
 async function cambiarFecha(){
+  const fechaAnterior=fechaInput.value;
+  if(!confirmarCambioBorradorFoto()){
+    fechaInput.value=fechaBorradorFoto||fechaAnterior;
+    return;
+  }
   clearTimeout(autoSaveTimer);
   registrosExistentes=0;
   estado("sin");
@@ -797,11 +1131,19 @@ async function cambiarFecha(){
   }
 }
 fechaInput.addEventListener("change",cambiarFecha);
-usuarioInput.addEventListener("change",async()=>{registrosExistentes=0;await cargarControlExistente();});
+usuarioInput.addEventListener("change",async()=>{
+  if(!confirmarCambioBorradorFoto()){
+    usuarioInput.value=usuarioBorradorFoto??"";
+    return;
+  }
+  registrosExistentes=0;
+  await cargarControlExistente();
+});
 
 function limpiarFormulario(){
   if(!confirm("¿Quieres limpiar los campos visibles? Esto solo limpia el formulario y no borra datos de la base de datos."))return;
   clearTimeout(autoSaveTimer);
+  establecerBorradorFoto(false);
   productosContainer.querySelectorAll('input[type="number"]').forEach(i=>i.value="");
   actualizarProgreso();actualizarCalculos();
   document.getElementById("mensaje").style.display="none";
@@ -809,6 +1151,11 @@ function limpiarFormulario(){
 }
 
 cargarDatosIniciales();
+window.addEventListener("beforeunload",event=>{
+  if(!datosFotoPendientes)return;
+  event.preventDefault();
+  event.returnValue="";
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </body>
