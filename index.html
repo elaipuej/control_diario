@@ -655,22 +655,43 @@ function puntuacionNombreProducto(nombre,linea){
 function obtenerFilasProductoOCR(lineas,productos){
   const encabezados=new Set(["productos","inicial","reposicion","sobrante","merma"]);
   const candidatas=lineas.filter(linea=>!linea.words.some(w=>encabezados.has(normalizarOCR(w.text))));
-  const usadas=new Set(),anclas=[];
-  candidatas.forEach(linea=>{
-    const resultados=productos.map((producto,index)=>({index,score:puntuacionNombreProducto(producto.nombre,linea)}))
-      .filter(x=>!usadas.has(x.index)).sort((a,b)=>b.score-a.score);
-    const mejor=resultados[0],segundo=resultados[1];
-    if(mejor&&mejor.score>=0.5&&(!segundo||mejor.score-segundo.score>=0.08)){
-      usadas.add(mejor.index);
-      anclas.push({index:mejor.index,y:linea.y});
+  const puntuaciones=candidatas.map(linea=>productos.map(producto=>puntuacionNombreProducto(producto.nombre,linea)));
+  const filas=candidatas.length+1,columnas=productos.length+1;
+  const calidad=Array.from({length:filas},()=>Array(columnas).fill(0));
+  const cantidad=Array.from({length:filas},()=>Array(columnas).fill(0));
+  const acciones=Array.from({length:filas},()=>Array(columnas).fill(""));
+  const mejorQue=(calidadNueva,cantidadNueva,calidadActual,cantidadActual)=>
+    calidadNueva>calidadActual+1e-8||(Math.abs(calidadNueva-calidadActual)<=1e-8&&cantidadNueva>cantidadActual);
+  for(let i=1;i<filas;i++){
+    for(let j=1;j<columnas;j++){
+      calidad[i][j]=calidad[i-1][j];
+      cantidad[i][j]=cantidad[i-1][j];
+      acciones[i][j]="linea";
+      if(mejorQue(calidad[i][j-1],cantidad[i][j-1],calidad[i][j],cantidad[i][j])){
+        calidad[i][j]=calidad[i][j-1];
+        cantidad[i][j]=cantidad[i][j-1];
+        acciones[i][j]="producto";
+      }
+      const puntuacion=puntuaciones[i-1][j-1];
+      if(puntuacion>=0.5&&mejorQue(calidad[i-1][j-1]+puntuacion,cantidad[i-1][j-1]+1,calidad[i][j],cantidad[i][j])){
+        calidad[i][j]=calidad[i-1][j-1]+puntuacion;
+        cantidad[i][j]=cantidad[i-1][j-1]+1;
+        acciones[i][j]="coincidencia";
+      }
     }
-  });
-  anclas.sort((a,b)=>a.index-b.index);
-  const umbral=1;
-  if(anclas.length<umbral)throw new Error(`Solo se reconocieron ${anclas.length} de ${productos.length} nombres de producto. Toma la foto de frente, con buena luz y toda la hoja visible.`);
-  for(let i=1;i<anclas.length;i++){
-    if(anclas[i].y<=anclas[i-1].y)throw new Error("No se pudo identificar con seguridad el orden de las filas. Comprueba que la hoja no esté girada ni inclinada.");
   }
+  const anclas=[];
+  let i=candidatas.length,j=productos.length;
+  while(i>0&&j>0){
+    if(acciones[i][j]==="coincidencia"){
+      anclas.push({index:j-1,y:candidatas[i-1].y});
+      i--;j--;
+    }else if(acciones[i][j]==="producto")j--;
+    else i--;
+  }
+  anclas.reverse();
+  const minimoAnclas=Math.min(2,productos.length);
+  if(anclas.length<minimoAnclas)throw new Error(`Solo se reconocieron ${anclas.length} nombres de producto. Toma la foto de frente, con buena luz y al menos dos filas visibles.`);
   const separaciones=[];
   for(let i=1;i<anclas.length;i++)separaciones.push((anclas[i].y-anclas[i-1].y)/(anclas[i].index-anclas[i-1].index));
   const paso=separaciones.length?separaciones.sort((a,b)=>a-b)[Math.floor(separaciones.length/2)]:28;
