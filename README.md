@@ -43,12 +43,14 @@ El Dashboard muestra:
 
 - **Resumen del periodo**: consumo estimado, merma, registros, días con datos, unidades iniciales, reposición y sobrante.
 - **Comparativas y gráficos**: consumo por trabajador y producto, y los productos con más y menos consumo.
-- **Previsión para mañana**: utiliza hasta cuatro registros de los últimos 120 días del mismo día de la semana. Si hay menos de dos registros, no presenta una estimación; con dos o tres, la marca como provisional. Si hay pocos datos para ese día de la semana, puede usar el historial de otros días, indicado con `*`.
+- **Previsión para mañana**: utiliza hasta 12 registros de los últimos 120 días del mismo día de la semana. Si hay menos de dos registros, no presenta una estimación; con dos o tres, la marca como provisional. Si hay menos de dos de ese día de la semana, puede recurrir a hasta 12 registros de otros días, indicado con `*`.
 - **Preparar**: consumo estimado para mañana menos el sobrante registrado hoy, con un mínimo de cero.
 - **Precisión de la previsión** e **Historial reciente**.
 - **Exportar CSV**: descarga los registros para abrirlos en una hoja de cálculo.
 
 La previsión es orientativa. No cambia al filtrar por trabajador: se calcula para toda la tienda. El sobrante de hoy se suma entre los registros de los usuarios.
+
+Para guardar previsiones y habilitar la comparación de precisión, ejecuta `supabase/migrations/20261117132000_public_forecast_writes.sql` en **Supabase → SQL Editor**. Esta política permite a cualquier visitante leer, insertar y actualizar filas de `previsiones`, necesario para el `upsert` del Dashboard. No da acceso de escritura a otras tablas, pero las previsiones públicas pueden ser modificadas por cualquier visitante; para una protección más estricta se necesita autenticación.
 
 ## Festivos de la Comunidad de Madrid
 

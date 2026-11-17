@@ -20,7 +20,7 @@ select,input{border:1px solid #ccd7e0;padding:11px;background:#fff}
 button{border:0;padding:12px;cursor:pointer;font-weight:bold}
 .btn-secondary{background:#e9eef3;color:#173F5F}.small-btn{width:auto;padding:9px 12px;font-size:12px}
 .controls{display:grid;grid-template-columns:180px 1fr 1fr 1fr;gap:10px;align-items:end}
-.range-summary{margin-top:10px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px}
+.range-summary{margin-top:10px;font-size:12px;color:#657786;background:#f7fafc;border:1px solid #e5edf3;border-radius:10px;padding:9px;overflow-wrap:anywhere}
 .section-title{font-size:15px;font-weight:bold;margin-bottom:7px}
 .note{font-size:12px;color:#657786;line-height:1.4}.muted{font-size:12px;color:#657786}
 .metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin-top:12px}
@@ -100,7 +100,7 @@ button{border:0;padding:12px;cursor:pointer;font-weight:bold}
 <section class="card">
   <div class="section-title">Previsión y preparación para mañana</div>
   <div id="forecastHead" class="muted"></div>
-  <div class="note" style="margin-top:6px">Usa hasta 4 registros de los últimos 120 días del mismo día de la semana, sin contar los días marcados como festivo, evento o cierre parcial. Es la previsión de toda la tienda y no cambia con el filtro de trabajador. “Preparar” descuenta el sobrante registrado hoy.</div>
+  <div class="note" style="margin-top:6px">Usa hasta 12 registros de los últimos 120 días del mismo día de la semana, sin contar los días marcados como festivo, evento o cierre parcial. Si hay menos de 2, recurre a otros días recientes. Es la previsión de toda la tienda y no cambia con el filtro de trabajador. “Preparar” descuenta el sobrante registrado hoy.</div>
   <div class="forecast-summary">
     <div class="fs-box fs-main"><div class="metric-label">Preparar</div><div class="fs-value" id="fsPreparar">—</div><div class="metric-sub">unidades</div></div>
     <div class="fs-box"><div class="metric-label">Consumo estimado</div><div class="fs-value" id="fsConsumo">—</div><div class="metric-sub">unidades</div></div>
@@ -215,7 +215,7 @@ function setupRange(){$('rango').addEventListener('change',()=>{actualizarRangoU
 function filaCalculo(r){const inicial=num(r.inicial),reposicion=num(r.reposicion),sobrante=num(r.sobrante),merma=num(r.merma),base=inicial+reposicion;return {inicial,reposicion,sobrante,merma,base,consumo:base-sobrante,pct:base?merma/base*100:0}}
 
 /* ---------- Motor de estimación (única implementación) ---------- */
-// obs: [[fecha, consumo], ...] en orden ascendente de fecha, máximo 4.
+// obs: [[fecha, consumo], ...] en orden ascendente de fecha, máximo 12.
 function estimarObservaciones(obs){
   const n=obs.length;
   if(n<2)return null;
@@ -289,7 +289,7 @@ async function cargarPrevision(){
 
     const filas=productosPrevision.map(p=>{
       const pid=String(p.id);
-      const ordenar=m=>[...(m[pid]||new Map()).entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-4);
+      const ordenar=m=>[...(m[pid]||new Map()).entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-12);
       let obs=ordenar(porProducto);
       const general=obs.length<2;
       if(general)obs=ordenar(porProductoTodos);

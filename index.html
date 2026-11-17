@@ -67,7 +67,21 @@ button:disabled{opacity:.6;cursor:default}
 .product-manager-status{display:block}
 .selector-count{font-size:12px;color:#657786;margin-top:8px}
 .tools-card .tool-link{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:13px;margin-top:10px;font-weight:bold;background:#1976D2;color:#fff}
-@media(max-width:480px){main{padding:10px}.card{padding:13px}.fields{gap:5px}.fields input{font-size:14px;padding:9px 3px}.product-manager-form{grid-template-columns:minmax(0,1fr) 125px 42px auto;gap:5px}.product-manager-form button{padding:9px 10px}.selector-item{gap:6px}.selector-item select{max-width:115px;padding:6px 3px}}
+@media(max-width:600px){
+  main{padding:10px}.card{padding:13px}
+  .fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .fields input{font-size:16px;min-height:44px;padding:9px 6px}
+  .selector-toolbar button,.selector-apply{min-height:44px}
+  .selector-item{flex-wrap:wrap;gap:8px}
+  .selector-item span{flex-basis:calc(100% - 34px)}
+  .selector-item select{max-width:none;min-height:40px;padding:7px;flex:1}
+  .selector-item input[type="color"]{min-width:42px;min-height:40px}
+  .selector-item-remove{min-height:40px}
+  .product-manager-form{grid-template-columns:minmax(0,1fr) 48px;gap:8px}
+  .product-manager-form #nuevoProductoNombre,.product-manager-form #nuevoProductoColor{grid-column:1/-1}
+  .product-manager-form #nuevoProductoColor{min-height:44px}
+  .product-manager-form button{grid-column:1/-1;width:100%;min-height:44px}
+}
 </style>
 </head>
 <body>
