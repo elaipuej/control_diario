@@ -55,6 +55,9 @@ button{border:0;padding:12px;cursor:pointer;font-weight:bold}
 .data-table th:first-child,.data-table td:first-child{text-align:left}
 .data-table th{font-size:10px;text-transform:uppercase;color:#657786}
 .name-cell{min-width:200px}
+.product-color-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.product-color-dot-unassigned{background:transparent!important;border:1px dashed #657786}
+.product-color-unassigned-label{font-size:10px;color:#657786;font-weight:normal;margin-right:6px}
 .history-row{padding:9px 0;border-bottom:1px solid #edf1f4;font-size:12px}
 .footer-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .footer-tools a{display:block;text-align:center;text-decoration:none;padding:12px;border-radius:10px}
@@ -184,6 +187,23 @@ function fmtNum(v){return v===null||v===undefined||Number.isNaN(Number(v))?'—'
 function fmtPct(v,dec=2){return v===null||v===undefined?'—':Number(v).toFixed(dec).replace('.',',')+'%'}
 function fmtSigned(v){if(v===null||v===undefined)return '—';return (v>0?'+':'')+Number(v).toFixed(1).replace('.',',')+'%'}
 function esc(s){return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
+function colorProducto(p){return /^#[0-9a-f]{6}$/i.test(String(p?.color||''))?p.color:null}
+function indicadorColorProducto(p){
+  const color=colorProducto(p);
+  return color
+    ?`<span class="product-color-dot" style="background-color:${esc(color)}"></span>`
+    :'<span class="product-color-dot product-color-dot-unassigned" title="Sin asignar"></span><span class="product-color-unassigned-label">Sin asignar</span>';
+}
+const ORDEN_COLORES_PRODUCTO=['#2ead68','#d9534f','#8a94a6','#1976d2','#f9a825'];
+function compararProductosPorColor(a,b){
+  const productoA=a.p||a,productoB=b.p||b;
+  const colorA=colorProducto(productoA)?.toLowerCase()||null,colorB=colorProducto(productoB)?.toLowerCase()||null;
+  const ordenA=colorA===null?ORDEN_COLORES_PRODUCTO.length+1:ORDEN_COLORES_PRODUCTO.indexOf(colorA)<0?ORDEN_COLORES_PRODUCTO.length:ORDEN_COLORES_PRODUCTO.indexOf(colorA);
+  const ordenB=colorB===null?ORDEN_COLORES_PRODUCTO.length+1:ORDEN_COLORES_PRODUCTO.indexOf(colorB)<0?ORDEN_COLORES_PRODUCTO.length:ORDEN_COLORES_PRODUCTO.indexOf(colorB);
+  return ordenA-ordenB
+    ||(colorA&&colorB?colorA.localeCompare(colorB):0)
+    ||String(productoA.nombre).localeCompare(String(productoB.nombre),'es',{sensitivity:'base'});
+}
 async function get(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||`HTTP ${r.status}`);return r.json()}
 // Descarga todas las filas paginando (PostgREST devuelve como máximo ~1000 por petición).
 // La ruta debe llevar ya su orden estable.
@@ -274,12 +294,12 @@ async function cargarPrevision(){
       const general=obs.length<2;
       if(general)obs=ordenar(porProductoTodos);
       const e=estimarObservaciones(obs);
-      if(!e)return {id:pid,idRaw:p.id,nombre:p.nombre,forecast:null,days:obs.length};
+      if(!e)return {id:pid,idRaw:p.id,nombre:p.nombre,color:colorProducto(p),forecast:null,days:obs.length};
       const registrado=Object.prototype.hasOwnProperty.call(sobrantesPorProducto,pid);
       const sobrante=registrado?sobrantesPorProducto[pid]:0;
-      return {id:pid,idRaw:p.id,nombre:p.nombre,forecast:e.forecast,preparar:Math.max(0,e.forecast-sobrante),sobrante,sobranteRegistrado:registrado,low:e.low,high:e.high,provisional:e.provisional,fia:fiabilidad(e,general),general,days:e.n};
+      return {id:pid,idRaw:p.id,nombre:p.nombre,color:colorProducto(p),forecast:e.forecast,preparar:Math.max(0,e.forecast-sobrante),sobrante,sobranteRegistrado:registrado,low:e.low,high:e.high,provisional:e.provisional,fia:fiabilidad(e,general),general,days:e.n};
     });
-    const rows=filas.sort((a,b)=>(b.preparar??-1)-(a.preparar??-1));
+    const rows=filas.sort(compararProductosPorColor);
     const conEst=rows.filter(x=>x.forecast!==null);
     const consumoTotal=conEst.reduce((a,x)=>a+x.forecast,0);
     const prepTotal=conEst.reduce((a,x)=>a+x.preparar,0);
@@ -312,12 +332,14 @@ async function cargarPrevision(){
 }
 
 function filaTabla(x){
-  if(x.forecast===null)return `<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td colspan="6" class="note">Sin estimación: hay ${x.days} registro(s) anterior(es) de este día de la semana; se necesitan al menos 2.</td></tr>`;
-  return `<tr><td class="name-cell"><strong>${esc(x.nombre)}</strong></td><td>${fmtNum(x.forecast)}</td><td>${x.sobranteRegistrado?fmtNum(x.sobrante):'—'}</td><td><strong>${fmtNum(x.preparar)}</strong></td><td>${x.provisional?'<span class="note">Provisional</span>':`${fmtNum(x.low)}–${fmtNum(x.high)}`}</td><td>${chipFia(x.fia,x.general)}</td><td>${x.days}</td></tr>`;
+  const nombre=`${indicadorColorProducto({color:x.color})}<strong>${esc(x.nombre)}</strong>`;
+  if(x.forecast===null)return `<tr><td class="name-cell">${nombre}</td><td colspan="6" class="note">Sin estimación: hay ${x.days} registro(s) anterior(es) de este día de la semana; se necesitan al menos 2.</td></tr>`;
+  return `<tr><td class="name-cell">${nombre}</td><td>${fmtNum(x.forecast)}</td><td>${x.sobranteRegistrado?fmtNum(x.sobrante):'—'}</td><td><strong>${fmtNum(x.preparar)}</strong></td><td>${x.provisional?'<span class="note">Provisional</span>':`${fmtNum(x.low)}–${fmtNum(x.high)}`}</td><td>${chipFia(x.fia,x.general)}</td><td>${x.days}</td></tr>`;
 }
 function tarjeta(x){
-  if(x.forecast===null)return `<div class="fcard"><div class="fcard-top"><strong>${esc(x.nombre)}</strong><span class="chip chip-sin">Sin estimación</span></div><div class="muted" style="margin-top:6px">Hay ${x.days} registro(s) anterior(es) de este día; se necesitan al menos 2.</div></div>`;
-  return `<div class="fcard"><div class="fcard-top"><strong>${esc(x.nombre)}</strong>${chipFia(x.fia,x.general)}</div><div class="fcard-prep">Preparar ${fmtNum(x.preparar)}</div><div class="fcard-grid"><span>Estimación</span><b>${fmtNum(x.forecast)}</b><span>Sobrante hoy</span><b>${x.sobranteRegistrado?fmtNum(x.sobrante):'—'}</b><span>Rango</span><b>${x.provisional?'Provisional':`${fmtNum(x.low)}–${fmtNum(x.high)}`}</b><span>Días</span><b>${x.days}</b></div></div>`;
+  const nombre=`${indicadorColorProducto({color:x.color})}<strong>${esc(x.nombre)}</strong>`;
+  if(x.forecast===null)return `<div class="fcard"><div class="fcard-top">${nombre}<span class="chip chip-sin">Sin estimación</span></div><div class="muted" style="margin-top:6px">Hay ${x.days} registro(s) anterior(es) de este día; se necesitan al menos 2.</div></div>`;
+  return `<div class="fcard"><div class="fcard-top">${nombre}${chipFia(x.fia,x.general)}</div><div class="fcard-prep">Preparar ${fmtNum(x.preparar)}</div><div class="fcard-grid"><span>Estimación</span><b>${fmtNum(x.forecast)}</b><span>Sobrante hoy</span><b>${x.sobranteRegistrado?fmtNum(x.sobrante):'—'}</b><span>Rango</span><b>${x.provisional?'Provisional':`${fmtNum(x.low)}–${fmtNum(x.high)}`}</b><span>Días</span><b>${x.days}</b></div></div>`;
 }
 
 async function guardarPrevisiones(fechaObjetivo,filas){
@@ -362,10 +384,10 @@ async function cargarPrecision(){
 function chartHtml(items){
   if(!items.length)return '<div class="chart-empty">Sin datos en este periodo.</div>';
   const max=Math.max(...items.map(x=>x.value),1);
-  return items.map((x,i)=>{const w=Math.max(2,Math.round(x.value/max*100));return `<div class="chart-row"><div class="chart-label" title="${esc(x.name)}"><strong>${i+1}. ${esc(x.name)}</strong></div><div class="chart-track"><div class="chart-fill" style="width:${w}%"></div></div><div class="chart-value">${fmtNum(x.value)}</div></div>`}).join('');
+  return items.map((x,i)=>{const w=Math.max(2,Math.round(x.value/max*100));return `<div class="chart-row"><div class="chart-label" title="${esc(x.name)}"><strong>${i+1}. ${esc(x.name)}</strong></div><div class="chart-track"><div class="chart-fill" style="width:${w}%;background-color:${esc(x.color||'#e5edf3')}"${x.color?'':` title="Sin asignar"`}></div></div><div class="chart-value">${fmtNum(x.value)}</div></div>`}).join('');
 }
 function renderCharts(bp){
-  const all=Object.values(bp).map(x=>({name:x.p.nombre,value:x.consumo}));
+  const all=Object.values(bp).map(x=>({name:x.p.nombre,value:x.consumo,color:colorProducto(x.p)}));
   const top=all.filter(x=>x.value>0).sort((a,b)=>b.value-a.value).slice(0,10);
   const bottom=[...all].sort((a,b)=>a.value-b.value).slice(0,10);
   $('top10').innerHTML=chartHtml(top);
@@ -376,7 +398,7 @@ function renderWorkers(bw){
   $('workerRows').innerHTML=rows||'<tr><td colspan="5" class="note">Sin datos.</td></tr>';
 }
 function renderProducts(bp){
-  const rows=Object.values(bp).sort((a,b)=>b.consumo-a.consumo).map(x=>{const pct=x.base?x.merma/x.base*100:0;return `<tr><td class="name-cell"><strong>${esc(x.p.nombre)}</strong></td><td>${fmtNum(x.consumo)}</td><td>${fmtNum(x.merma)}</td><td>${fmtPct(pct)}</td></tr>`}).join('');
+  const rows=Object.values(bp).sort(compararProductosPorColor).map(x=>{const pct=x.base?x.merma/x.base*100:0;return `<tr><td class="name-cell">${indicadorColorProducto(x.p)}<strong>${esc(x.p.nombre)}</strong></td><td>${fmtNum(x.consumo)}</td><td>${fmtNum(x.merma)}</td><td>${fmtPct(pct)}</td></tr>`}).join('');
   $('productRows').innerHTML=rows||'<tr><td colspan="4" class="note">Sin datos.</td></tr>';
 }
 

@@ -29,10 +29,11 @@ El indicador de progreso cuenta los productos que tienen al menos un campo relle
 
 En **Seleccionar productos del día**, la sección **Gestionar catálogo de productos** permite:
 
-- **Añadir** un producto por su nombre. Después de añadirlo, queda marcado para la fecha seleccionada; pulsa **APLICAR SELECCIÓN** para incluirlo en ese día.
+- **Añadir** un producto por su nombre y eligiendo el color en el desplegable (Sin asignar, Verde, Rojo, Gris, Azul o Amarillo). La opción **Nuevo color...** permite elegir un color personalizado.
+- **Cambiar el color** de un producto con el desplegable junto a su nombre; también permite dejarlo **Sin asignar** o definir un color personalizado.
 - **Quitar** un producto del catálogo activo usando el botón junto a su nombre. La aplicación pide confirmación y conserva los registros históricos del producto.
 
-La gestión modifica el catálogo compartido, no solo el formulario local. Si no puedes añadir o quitar un producto y aparece un error, avisa a la persona responsable de la aplicación.
+Los productos se ordenan por color (Verde, Rojo, Gris, Azul y Amarillo); después aparecen los colores personalizados y, al final, los productos sin color asignado. Para habilitar esta función, ejecuta en orden los scripts de `supabase/migrations/` en **Supabase → SQL Editor**. Si ya ejecutaste `20261117123000_product_color.sql`, ejecuta también `20261117130700_product_color_unassigned.sql` para conservar como **Sin asignar** los productos que así aparecen en el catálogo. Las migraciones añaden `productos.color`, asignan los colores indicados y actualizan las funciones de gestión. La gestión modifica el catálogo compartido, no solo el formulario local. Si aparece un error al gestionar el catálogo, avisa a la persona responsable de la aplicación.
 
 ## Consultar el Dashboard
 
