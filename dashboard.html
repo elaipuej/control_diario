@@ -112,23 +112,24 @@ button{border:0;padding:12px;cursor:pointer;font-weight:bold}
   <div id="forecastCards" class="forecast-cards"></div>
   <div id="forecastTotal" class="range-summary"></div>
   <div class="legend">
-    <span class="chip chip-fiable">Fiable</span> <span class="chip chip-orientativa">Orientativa</span> <span class="chip chip-poco">Poco fiable</span>
+    <span class="chip chip-fiable">Estable en muestra</span> <span class="chip chip-orientativa">Orientativa</span> <span class="chip chip-poco">Poca base</span>
     · Provisional: 2 o 3 registros, se muestra la cifra sin rango. · * usa historial de otros días de la semana.
+    Estas etiquetas son una referencia basada en cantidad y variabilidad de datos; no garantizan la precisión de la previsión.
   </div>
 </section>
 
 <section class="card">
   <div class="section-title">Precisión de la previsión</div>
-  <div class="note">Compara lo previsto cada día con el consumo registrado. Diferencia positiva = se previó más de lo que se consumió. Se compara con las previsiones guardadas al abrir este dashboard.</div>
+  <div class="note">Compara la previsión con el consumo registrado (Inicial + Reposición − Sobrante − Merma). Muestra el error absoluto medio y el error porcentual ponderado; este último incluye los días con consumo cero. Solo considera previsiones guardadas con esta definición de consumo.</div>
   <div id="precisionResumen" class="range-summary"></div>
   <div class="table-wrap">
-    <table class="data-table"><thead><tr><th>Día</th><th>Previsto</th><th>Real</th><th>Diferencia</th></tr></thead><tbody id="precisionRows"></tbody></table>
+    <table class="data-table"><thead><tr><th>Día</th><th>Previsto</th><th>Real</th><th>Error absoluto</th></tr></thead><tbody id="precisionRows"></tbody></table>
   </div>
 </section>
 
 <section class="card">
   <div class="section-title">Resumen del periodo</div>
-  <div class="note">“Consumo” = Inicial + Reposición − Sobrante. Sirve como aproximación a unidades vendidas mientras no tengamos datos de caja/POS.</div>
+  <div class="note">“Consumo” = Inicial + Reposición − Sobrante − Merma. Es una aproximación a las unidades vendidas, no una lectura del sistema de caja.</div>
   <div class="metric-grid">
     <div class="metric"><div class="metric-label">Unidades consumidas</div><div class="metric-value" id="mConsumo">0</div></div>
     <div class="metric"><div class="metric-label">% Merma</div><div class="metric-value" id="mMermaPct">0,00%</div><div class="metric-sub" id="mMermaUnits">0 unidades</div></div>
@@ -177,6 +178,7 @@ const headers={"apikey":SUPABASE_KEY,"Content-Type":"application/json"};
 let PRODUCTOS=[],USUARIOS=[];
 const $=id=>document.getElementById(id);
 const DIA_SEMANA=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const CONSUMO_FORMULA_DESDE="2026-11-17T21:50:00Z";
 
 function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
 function parseISO(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
@@ -232,7 +234,7 @@ async function getAll(path){const PAGE=1000,out=[];for(let off=0;;off+=PAGE){con
 function rangoPeriodo(){const h=parseISO(fechaLocalISO()),op=$('rango').value;let d=new Date(h),u=new Date(h);if(op==='ayer'){d.setDate(d.getDate()-1);u=new Date(d)}else if(op==='semana'){const dow=h.getDay()||7;d.setDate(h.getDate()-(dow-1))}else if(op==='mes'){d=new Date(h.getFullYear(),h.getMonth(),1)}else if(op==='custom'){d=parseISO($('desde').value||fechaLocalISO());u=parseISO($('hasta').value||$('desde').value||fechaLocalISO())}return {desde:iso(d),hasta:iso(u)}}
 function actualizarRangoUI(){const r=rangoPeriodo();$('desde').value=r.desde;$('hasta').value=r.hasta;$('rangoResumen').textContent=`Periodo: ${fmtDate(r.desde)} → ${fmtDate(r.hasta)}`}
 function setupRange(){$('rango').addEventListener('change',()=>{actualizarRangoUI();cargarDashboard()});$('desde').addEventListener('change',()=>{$('rango').value='custom';actualizarRangoUI();cargarDashboard()});$('hasta').addEventListener('change',()=>{$('rango').value='custom';actualizarRangoUI();cargarDashboard()})}
-function filaCalculo(r){const inicial=num(r.inicial),reposicion=num(r.reposicion),sobrante=num(r.sobrante),merma=num(r.merma),base=inicial+reposicion;return {inicial,reposicion,sobrante,merma,base,consumo:base-sobrante,pct:base?merma/base*100:0}}
+function filaCalculo(r){const inicial=num(r.inicial),reposicion=num(r.reposicion),sobrante=num(r.sobrante),merma=num(r.merma),base=inicial+reposicion;return {inicial,reposicion,sobrante,merma,base,consumo:Math.max(0,base-sobrante-merma),pct:base?merma/base*100:0}}
 
 /* ---------- Motor de estimación (única implementación) ---------- */
 // obs: [[fecha, consumo], ...] en orden ascendente de fecha, máximo 12.
@@ -258,15 +260,13 @@ function fiabilidad(e,general){
   return 'poco';
 }
 function chipFia(fia,general){
-  const m={fiable:['Fiable','chip-fiable'],orientativa:['Orientativa','chip-orientativa'],poco:['Poco fiable','chip-poco']}[fia]||['—','chip-sin'];
+  const m={fiable:['Estable en muestra','chip-fiable'],orientativa:['Orientativa','chip-orientativa'],poco:['Poca base','chip-poco']}[fia]||['—','chip-sin'];
   return `<span class="chip ${m[1]}">${m[0]}${general?'*':''}</span>`;
 }
 
 async function cargarDiasEspeciales(desde,hasta){
-  try{
-    const rows=await getAll(`/dias_especiales?select=fecha,tipo&fecha=gte.${desde}&fecha=lte.${hasta}&order=fecha.asc`);
-    return new Map(rows.map(r=>[r.fecha,r.tipo]));
-  }catch(e){console.warn('dias_especiales no disponible:',e);return new Map()}
+  const rows=await getAll(`/dias_especiales?select=fecha,tipo&fecha=gte.${desde}&fecha=lte.${hasta}&order=fecha.asc`);
+  return new Map(rows.map(r=>[r.fecha,r.tipo]));
 }
 
 async function cargarPrevision(){
@@ -344,10 +344,10 @@ async function cargarPrevision(){
     }
   }catch(e){
     console.error(e);
-    $('forecastHead').textContent='';
-    $('forecastRows').innerHTML=`<tr><td colspan="7" class="note">No se pudo calcular la previsión: ${esc(e.message)}</td></tr>`;
+    $('forecastHead').textContent='No se pudo completar la previsión.';
+    $('forecastRows').innerHTML=`<tr><td colspan="7" class="note">No se pudo calcular la previsión; no se muestra una recomendación parcial. Detalle: ${esc(e.message)}</td></tr>`;
     $('forecastCards').innerHTML='';
-    $('forecastTotal').textContent='';
+    $('forecastTotal').textContent='No se muestra una previsión parcial para evitar una recomendación que pueda incluir días festivos o especiales.';
   }
 }
 
@@ -373,26 +373,29 @@ async function cargarPrecision(){
   const hoy=fechaLocalISO();
   const d=new Date();d.setDate(d.getDate()-30);const desde=iso(d);
   try{
-    const prev=await getAll(`/previsiones?select=fecha_objetivo,producto_id,previsto&fecha_objetivo=gte.${desde}&fecha_objetivo=lt.${hoy}&order=fecha_objetivo.asc,producto_id.asc`);
+    const prev=await getAll(`/previsiones?select=fecha_objetivo,producto_id,previsto,creado_en&fecha_objetivo=gte.${desde}&fecha_objetivo=lt.${hoy}&creado_en=gte.${encodeURIComponent(CONSUMO_FORMULA_DESDE)}&order=fecha_objetivo.asc,producto_id.asc`);
     if(!prev.length){
       $('precisionResumen').textContent='Todavía no hay previsiones guardadas para comparar.';
       $('precisionRows').innerHTML='<tr><td colspan="4" class="note">Las previsiones se guardan al abrir este dashboard. Cuando haya días con previsión y consumo registrado, aparecerán aquí.</td></tr>';
       return;
     }
-    const reales=await getAll(`/registros?select=fecha,producto_id,inicial,reposicion,sobrante&fecha=gte.${desde}&fecha=lt.${hoy}&order=fecha.asc,usuario_id.asc,producto_id.asc`);
+    const reales=await getAll(`/registros?select=fecha,producto_id,inicial,reposicion,sobrante,merma&fecha=gte.${desde}&fecha=lt.${hoy}&order=fecha.asc,usuario_id.asc,producto_id.asc`);
     const real=new Map();
     reales.forEach(r=>{const k=`${r.fecha}|${r.producto_id}`;real.set(k,(real.get(k)||0)+Math.max(0,filaCalculo(r).consumo))});
     const pares=prev.filter(p=>real.has(`${p.fecha_objetivo}|${p.producto_id}`)).map(p=>({fecha:p.fecha_objetivo,previsto:Number(p.previsto)||0,real:real.get(`${p.fecha_objetivo}|${p.producto_id}`)}));
-    const errores=pares.filter(x=>x.real>0).map(x=>Math.abs(x.previsto-x.real)/x.real*100);
-    const medio=errores.length?errores.reduce((a,b)=>a+b,0)/errores.length:null;
+    const errorAbsolutoMedio=pares.length?pares.reduce((total,x)=>total+Math.abs(x.previsto-x.real),0)/pares.length:null;
+    const consumoRealTotal=pares.reduce((total,x)=>total+x.real,0);
+    const errorPorcentualPonderado=consumoRealTotal>0
+      ?pares.reduce((total,x)=>total+Math.abs(x.previsto-x.real),0)/consumoRealTotal*100
+      :null;
     $('precisionResumen').textContent=pares.length
-      ?`${pares.length} comparaciones producto-día en los últimos 30 días. Error medio por producto: ${fmtPct(medio,1)}.`
-      :'Hay previsiones guardadas, pero todavía no coinciden con días con consumo registrado.';
+      ?`${pares.length} comparaciones producto-día en los últimos 30 días. Error absoluto medio: ${fmtNum(errorAbsolutoMedio)} unidades por producto-día. ${errorPorcentualPonderado===null?'No se puede calcular el error porcentual ponderado porque el consumo real total fue cero.':`Error porcentual ponderado: ${fmtPct(errorPorcentualPonderado,1)}.`}`
+      :'Todavía no hay comparaciones válidas desde la actualización del cálculo de consumo.';
     const dias=new Map();
     pares.forEach(x=>{const a=dias.get(x.fecha)||{previsto:0,real:0};a.previsto+=x.previsto;a.real+=x.real;dias.set(x.fecha,a)});
     const filas=[...dias.entries()].sort((a,b)=>b[0].localeCompare(a[0])).slice(0,14);
     $('precisionRows').innerHTML=filas.length
-      ?filas.map(([f,a])=>{const dif=a.real>0?(a.previsto-a.real)/a.real*100:null;return `<tr><td><strong>${fmtDate(f)}</strong></td><td>${fmtNum(a.previsto)}</td><td>${fmtNum(a.real)}</td><td>${fmtSigned(dif)}</td></tr>`}).join('')
+      ?filas.map(([f,a])=>{const error=Math.abs(a.previsto-a.real);return `<tr><td><strong>${fmtDate(f)}</strong></td><td>${fmtNum(a.previsto)}</td><td>${fmtNum(a.real)}</td><td>${fmtNum(error)} unidades</td></tr>`}).join('')
       :'<tr><td colspan="4" class="note">Sin datos.</td></tr>';
   }catch(e){
     console.error(e);
@@ -434,7 +437,7 @@ async function cargarDashboard(){
     const users=Object.fromEntries(USUARIOS.map(u=>[String(u.id),u.nombre]));
     const prods=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),p]));
     const total={inicial:0,consumo:0,merma:0,base:0,reposicion:0,sobrante:0};
-    const dias=new Set(),byProduct={},byWorker={};
+    const dias=new Set(),byProduct=Object.fromEntries(PRODUCTOS.map(p=>[String(p.id),{p,reg:0,consumo:0,merma:0,base:0}])),byWorker={};
     registros.forEach(r=>{
       const x=filaCalculo(r);
       Object.keys(total).forEach(k=>total[k]+=x[k]||0);

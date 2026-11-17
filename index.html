@@ -561,7 +561,7 @@ function crearProductos(){
 function calcularProducto(id){
   const get=c=>{const el=document.querySelector(`[data-producto="${id}"][data-campo="${c}"]`);return el?Number(el.value)||0:0;};
   const inicial=get("inicial"), reposicion=get("reposicion"), sobrante=get("sobrante"), merma=get("merma");
-  const base=inicial+reposicion, consumo=base-sobrante, pct=base>0?(merma/base)*100:0;
+  const base=inicial+reposicion, consumo=Math.max(0,base-sobrante-merma), pct=base>0?(merma/base)*100:0;
   const ce=document.querySelector(`[data-calculo="consumo"][data-producto="${id}"]`);
   const me=document.querySelector(`[data-calculo="mermaPct"][data-producto="${id}"]`);
   if(ce)ce.textContent=String(consumo);
@@ -616,6 +616,7 @@ function validarRegistros(registros){
     if([r.inicial,r.reposicion,r.sobrante,r.merma].some(v=>v<0))errores.push(`${nombre}: no se admiten valores negativos.`);
     if(r.sobrante>base)errores.push(`${nombre}: el sobrante (${r.sobrante}) supera lo disponible (${base}).`);
     if(r.merma>base)errores.push(`${nombre}: la merma (${r.merma}) supera la base (${base}).`);
+    if(r.sobrante+r.merma>base)errores.push(`${nombre}: el sobrante más la merma (${r.sobrante+r.merma}) superan lo disponible (${base}).`);
   });
   return errores;
 }

@@ -17,9 +17,9 @@ Abre `index.html` para registrar el control diario. Desde esa página, seleccion
    - **Reposición**: unidades añadidas durante el día.
    - **Sobrante**: unidades que quedan al final.
    - **Merma**: unidades perdidas o descartadas.
-6. Los valores se guardan automáticamente tras dejar de escribir un momento. También puedes pulsar **GUARDAR CONTROL**. La aplicación valida que no haya valores negativos y que el sobrante y la merma no superen Inicial + Reposición.
+6. Los valores se guardan automáticamente tras dejar de escribir un momento. También puedes pulsar **GUARDAR CONTROL**. La aplicación valida que no haya valores negativos y que el sobrante más la merma no superen Inicial + Reposición.
 
-El consumo que muestra la aplicación se calcula como **Inicial + Reposición − Sobrante**. Es una aproximación a las unidades vendidas, no una lectura del sistema de caja. La merma porcentual se calcula sobre Inicial + Reposición.
+El consumo que muestra la aplicación se calcula como **Inicial + Reposición − Sobrante − Merma**, con un mínimo de cero. Es una aproximación a las unidades vendidas, no una lectura del sistema de caja. La merma porcentual se calcula sobre Inicial + Reposición.
 
 El indicador de progreso cuenta los productos que tienen al menos un campo rellenado; no necesariamente significa que todos sus campos estén completos. Si no hay conexión, los cambios pendientes se guardan temporalmente en el navegador y se reenvían cuando vuelva internet. No borres los datos del navegador mientras haya registros pendientes.
 
@@ -43,7 +43,7 @@ El Dashboard muestra:
 
 - **Resumen del periodo**: consumo estimado, merma, registros, días con datos, unidades iniciales, reposición y sobrante.
 - **Comparativas y gráficos**: consumo por trabajador y producto, y los productos con más y menos consumo; las tablas y previsiones muestran la categoría de cada producto.
-- **Previsión para mañana**: utiliza hasta 12 registros de los últimos 120 días del mismo día de la semana. Si hay menos de dos registros, no presenta una estimación; con dos o tres, la marca como provisional. Si hay menos de dos de ese día de la semana, puede recurrir a hasta 12 registros de otros días, indicado con `*`.
+- **Previsión para mañana**: utiliza el consumo estimado (descontando sobrante y merma) de hasta 12 registros de los últimos 120 días del mismo día de la semana. Si hay menos de dos registros, no presenta una estimación; con dos o tres, la marca como provisional. Si hay menos de dos de ese día de la semana, puede recurrir a hasta 12 registros de otros días, indicado con `*`.
 - **Preparar**: consumo estimado para mañana menos el sobrante registrado hoy, con un mínimo de cero.
 - **Precisión de la previsión** e **Historial reciente**.
 - **Exportar CSV**: descarga los registros para abrirlos en una hoja de cálculo, incluida la categoría del producto.
@@ -51,6 +51,8 @@ El Dashboard muestra:
 El Excel generado desde el control diario también incluye una columna de categoría y ordena los productos por categoría.
 
 La previsión es orientativa. No cambia al filtrar por trabajador: se calcula para toda la tienda. El sobrante de hoy se suma entre los registros de los usuarios.
+
+La precisión se expresa como error absoluto medio en unidades y error porcentual ponderado, incluyendo comparaciones cuyo consumo real fue cero. Las etiquetas de fiabilidad describen la cantidad y variabilidad de la muestra; no garantizan la precisión. Al cambiar la definición de consumo, la comparación histórica solo considera previsiones guardadas con la fórmula nueva.
 
 Para guardar previsiones y habilitar la comparación de precisión, ejecuta `supabase/migrations/20261117132000_public_forecast_writes.sql` en **Supabase → SQL Editor**. Esta política permite a cualquier visitante leer, insertar y actualizar filas de `previsiones`, necesario para el `upsert` del Dashboard. No da acceso de escritura a otras tablas, pero las previsiones públicas pueden ser modificadas por cualquier visitante; para una protección más estricta se necesita autenticación.
 
