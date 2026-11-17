@@ -154,9 +154,9 @@ button:disabled{opacity:.6;cursor:default}
   <div id="productosControlPanel" class="selector-panel" hidden>
     <div class="photo-loader">
       <div class="section-title">Cargar datos desde una foto</div>
-      <div class="muted">Fotografía la hoja impresa. El reconocimiento se procesa en este navegador; revisa los campos y pulsa GUARDAR CONTROL. La imagen no se envía a Supabase.</div>
-      <label for="fotoControl">Foto de la hoja de control</label>
-      <input id="fotoControl" type="file" accept="image/*" capture="environment">
+      <div class="muted">Haz una foto ahora o elige una imagen de la galería. El reconocimiento se procesa en este navegador; revisa los campos y pulsa GUARDAR CONTROL. La imagen no se envía a Supabase.</div>
+      <label for="fotoControl">Hacer foto o elegir de la galería</label>
+      <input id="fotoControl" type="file" accept="image/*">
       <img id="fotoControlPreview" class="photo-preview" alt="Vista previa de la hoja fotografiada" hidden>
       <div class="photo-actions">
         <button type="button" class="btn-primary" id="leerFotoBtn" disabled>LEER FOTO</button>
