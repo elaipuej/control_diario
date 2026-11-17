@@ -27,9 +27,9 @@ button:disabled{opacity:.6;cursor:default}
 .progress{height:100%;width:0;background:#2EAD68;transition:width .2s}
 .progress-info{display:flex;justify-content:space-between;font-size:12px;margin-top:7px;color:#657786}
 .section-title{font-size:15px;font-weight:bold;margin-bottom:8px}
-.product{border:1px solid #e2e9ee;border-left:6px solid #8A94A6;border-radius:12px;padding:13px;margin-bottom:10px}
+.product{border:1px solid #e2e9ee;border-left:6px solid var(--category-color,#e2e9ee);border-radius:12px;padding:13px;margin-bottom:10px}
 .product-name{font-weight:bold;font-size:14px;margin-bottom:10px}
-.product-unassigned{font-size:11px;color:#657786;font-weight:normal}
+.product-category{display:inline-block;font-size:10px;color:var(--category-text,#657786);background:var(--category-bg,#edf1f4);font-weight:bold;margin-top:4px;padding:3px 8px;border-radius:999px}
 .fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}
 .fields input{padding:9px 5px}
@@ -55,13 +55,17 @@ button:disabled{opacity:.6;cursor:default}
 .selector-item{display:flex;align-items:center;gap:10px;padding:9px 7px;border-bottom:1px solid #edf1f4;font-size:13px}
 .selector-item:last-child{border-bottom:0}
 .selector-item input{width:18px;height:18px;flex:0 0 auto;margin:0}
-.selector-item span{flex:1;min-width:0}
+.selector-item-name{flex:1;min-width:0}
+.selector-item-name .product-category{display:table}
 .selector-item-remove{width:auto;padding:7px 9px;background:#fff0f0;color:#9b2929;font-size:11px}
 .product-manager{border-top:1px solid #e2e9ee;margin-top:14px;padding-top:12px}
-.product-manager-form{display:grid;grid-template-columns:minmax(0,1fr) 150px 48px auto;gap:8px;margin-top:8px}
-.product-manager-form input[type="color"],.selector-item input[type="color"]{width:42px;height:40px;padding:4px;cursor:pointer}
-.product-color-picker[hidden]{display:none}
-.selector-item select{width:auto;max-width:145px;padding:7px;font-size:12px}
+.product-manager-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,240px) auto;gap:8px;margin-top:8px}
+.product-manager-form #nuevoProductoCategoriaNueva{grid-column:1/-1}
+.selector-item select{width:auto;max-width:210px;padding:7px;font-size:12px}
+.category-edit{display:flex;align-items:center;gap:6px;flex:1 1 100%;padding-left:28px}
+.category-edit input{min-width:0;flex:1}
+.category-edit button{width:auto;min-height:38px;padding:7px 10px;font-size:11px}
+.category-edit[hidden],.product-manager-form input[hidden]{display:none}
 .product-manager-form button{width:auto;padding:10px 14px}
 .product-manager-note{margin-top:7px}
 .product-manager-status{display:block}
@@ -73,13 +77,13 @@ button:disabled{opacity:.6;cursor:default}
   .fields input{font-size:16px;min-height:44px;padding:9px 6px}
   .selector-toolbar button,.selector-apply{min-height:44px}
   .selector-item{flex-wrap:wrap;gap:8px}
-  .selector-item span{flex-basis:calc(100% - 34px)}
+  .selector-item-name{flex-basis:calc(100% - 34px)}
   .selector-item select{max-width:none;min-height:40px;padding:7px;flex:1}
-  .selector-item input[type="color"]{min-width:42px;min-height:40px}
   .selector-item-remove{min-height:40px}
-  .product-manager-form{grid-template-columns:minmax(0,1fr) 48px;gap:8px}
-  .product-manager-form #nuevoProductoNombre,.product-manager-form #nuevoProductoColor{grid-column:1/-1}
-  .product-manager-form #nuevoProductoColor{min-height:44px}
+  .category-edit{padding-left:0}
+  .product-manager-form{grid-template-columns:minmax(0,1fr);gap:8px}
+  .product-manager-form #nuevoProductoNombre,.product-manager-form #nuevoProductoCategoria,.product-manager-form #nuevoProductoCategoriaNueva{grid-column:1}
+  .product-manager-form #nuevoProductoCategoria{min-height:44px}
   .product-manager-form button{grid-column:1/-1;width:100%;min-height:44px}
 }
 </style>
@@ -122,8 +126,8 @@ button:disabled{opacity:.6;cursor:default}
       <div class="muted">Los cambios se guardan en la base de datos y afectan a todos los días. Al quitar un producto se conserva su historial.</div>
       <form class="product-manager-form" id="nuevoProductoForm">
         <input id="nuevoProductoNombre" type="text" maxlength="120" placeholder="Nombre del nuevo producto" aria-label="Nombre del nuevo producto" required>
-        <select id="nuevoProductoColor" aria-label="Color del nuevo producto" required></select>
-        <input id="nuevoProductoColorPersonalizado" class="product-color-picker" type="color" value="#8A94A6" aria-label="Elegir nuevo color" title="Elegir nuevo color" hidden>
+        <select id="nuevoProductoCategoria" aria-label="Categoría del nuevo producto" required></select>
+        <input id="nuevoProductoCategoriaNueva" type="text" maxlength="80" placeholder="Nombre de la nueva categoría" aria-label="Nombre de la nueva categoría" hidden>
         <button type="submit" class="btn-primary" id="anadirProductoBtn">AÑADIR</button>
       </form>
       <div id="productManagerStatus" class="message product-manager-status" role="status" aria-live="polite"></div>
@@ -162,14 +166,9 @@ const headers = { "apikey": SUPABASE_KEY, "Content-Type": "application/json" };
 const HORA_AVISO = 20;              // a partir de esta hora se avisa de productos sin registrar hoy
 const COLA_KEY = "control_diario_pendientes";
 const TIPOS_DIA = ["Normal", "Festivo", "Evento", "Cierre parcial"];
-const COLORES_PRODUCTO = [
-  {nombre:"Verde",hex:"#2EAD68"},
-  {nombre:"Rojo",hex:"#D9534F"},
-  {nombre:"Gris",hex:"#8A94A6"},
-  {nombre:"Azul",hex:"#1976D2"},
-  {nombre:"Amarillo",hex:"#F9A825"}
-];
-const COLOR_PERSONALIZADO = "personalizado";
+const CATEGORIAS_BASE = ["PANINI CLUB","SANDWICH PANINI GRILL","POKE & FRIENDS","CRAB & GO","THE SPOON","CELIACO"];
+const SIN_CATEGORIA = "Sin categoría";
+const NUEVA_CATEGORIA = "__nueva_categoria__";
 
 let PRODUCTOS = [];
 let USUARIOS = [];
@@ -193,33 +192,72 @@ const productosControlTitulo = document.getElementById("productosControlTitulo")
 
 function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
-function colorProducto(producto){return /^#[0-9a-f]{6}$/i.test(String(producto.color||""))?producto.color:null;}
-function nombreProductoControl(producto,numero){return `${numero}. ${escapeHtml(producto.nombre)}${colorProducto(producto)?"":' <span class="product-unassigned">· Sin asignar</span>'}`;}
-function ordenarProductosPorColor(){
-  const ordenColores=new Map(COLORES_PRODUCTO.map((color,index)=>[color.hex.toLowerCase(),index]));
-  PRODUCTOS.sort((a,b)=>{
-    const colorA=colorProducto(a)?.toLowerCase()||null,colorB=colorProducto(b)?.toLowerCase()||null;
-    const ordenA=colorA===null?COLORES_PRODUCTO.length+1:ordenColores.has(colorA)?ordenColores.get(colorA):COLORES_PRODUCTO.length;
-    const ordenB=colorB===null?COLORES_PRODUCTO.length+1:ordenColores.has(colorB)?ordenColores.get(colorB):COLORES_PRODUCTO.length;
-    return ordenA-ordenB||(colorA&&colorB?colorA.localeCompare(colorB):0)||String(a.nombre).localeCompare(String(b.nombre),"es",{sensitivity:"base"});
-  });
+function categoriaProducto(producto){return String(producto.categoria||"").trim()||SIN_CATEGORIA;}
+const COLORES_CATEGORIA={
+  "PANINI CLUB":["#438A5E","#E8F4EB"],
+  "SANDWICH PANINI GRILL":["#A96A25","#FBF0E2"],
+  "POKE & FRIENDS":["#496BB0","#EAF0FB"],
+  "CRAB & GO":["#87559A","#F3EAF6"],
+  "THE SPOON":["#B24F4B","#F9EBEA"],
+  "CELIACO":["#317E7A","#E7F3F2"],
+  [SIN_CATEGORIA]:["#687783","#EDF1F4"]
+};
+function coloresCategoria(categoria){
+  if(COLORES_CATEGORIA[categoria])return COLORES_CATEGORIA[categoria];
+  let hash=0;
+  for(const char of categoria)hash=(hash*31+char.codePointAt(0))>>>0;
+  const tono=hash%360;
+  return [`hsl(${tono}, 38%, 36%)`,`hsl(${tono}, 45%, 94%)`];
+}
+function estiloCategoria(categoria){
+  const [color,fondo]=coloresCategoria(categoria);
+  return `--category-color:${color};--category-text:${color};--category-bg:${fondo}`;
+}
+function nombreProductoControl(producto,numero){
+  const categoria=categoriaProducto(producto);
+  return `${numero}. ${escapeHtml(producto.nombre)}<span class="product-category" style="${estiloCategoria(categoria)}">${escapeHtml(categoria)}</span>`;
+}
+function compararProductosPorCategoria(a,b){
+  const categoriaA=categoriaProducto(a),categoriaB=categoriaProducto(b);
+  const indexA=CATEGORIAS_BASE.indexOf(categoriaA),indexB=CATEGORIAS_BASE.indexOf(categoriaB);
+  const ordenA=categoriaA===SIN_CATEGORIA?CATEGORIAS_BASE.length+1:indexA<0?CATEGORIAS_BASE.length:indexA;
+  const ordenB=categoriaB===SIN_CATEGORIA?CATEGORIAS_BASE.length+1:indexB<0?CATEGORIAS_BASE.length:indexB;
+  return ordenA-ordenB
+    ||(ordenA===CATEGORIAS_BASE.length?categoriaA.localeCompare(categoriaB,"es",{sensitivity:"base"}):0)
+    ||String(a.nombre).localeCompare(String(b.nombre),"es",{sensitivity:"base"});
+}
+function ordenarProductosPorCategoria(){
+  PRODUCTOS.sort(compararProductosPorCategoria);
   PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>{
     const tarjeta=Array.from(productosContainer.querySelectorAll("[data-product-card]")).find(card=>card.dataset.productCard===String(p.id));
     if(tarjeta){
       tarjeta.querySelector(".product-name").innerHTML=nombreProductoControl(p,PRODUCTOS.indexOf(p)+1);
-      tarjeta.style.borderLeftColor=colorProducto(p)||"transparent";
+      tarjeta.style.setProperty("--category-color",coloresCategoria(categoriaProducto(p))[0]);
       productosContainer.appendChild(tarjeta);
     }
   });
 }
-function opcionesColorProducto(incluirPlaceholder=true){
-  return `${incluirPlaceholder?'<option value="">Seleccionar color...</option>':""}<option value="sin_asignar">Sin asignar</option>${COLORES_PRODUCTO.map(c=>`<option value="${c.hex}">${c.nombre}</option>`).join("")}<option value="${COLOR_PERSONALIZADO}">Nuevo color...</option>`;
+function categoriasDisponibles(){
+  const existentes=PRODUCTOS.map(p=>categoriaProducto(p)).filter(c=>c!==SIN_CATEGORIA&&!CATEGORIAS_BASE.includes(c));
+  return [...CATEGORIAS_BASE,...new Set(existentes).values()].sort((a,b)=>{
+    const indexA=CATEGORIAS_BASE.indexOf(a),indexB=CATEGORIAS_BASE.indexOf(b);
+    if(indexA>=0||indexB>=0)return (indexA<0?CATEGORIAS_BASE.length:indexA)-(indexB<0?CATEGORIAS_BASE.length:indexB);
+    return a.localeCompare(b,"es",{sensitivity:"base"});
+  });
 }
-function esColorCatalogo(color){return COLORES_PRODUCTO.some(c=>c.hex.toLowerCase()===String(color||"").toLowerCase());}
-function renderizarOpcionColorNuevo(){document.getElementById("nuevoProductoColor").innerHTML=opcionesColorProducto();}
-document.getElementById("nuevoProductoColor").addEventListener("change",()=>{
-  const personalizado=document.getElementById("nuevoProductoColor").value===COLOR_PERSONALIZADO;
-  document.getElementById("nuevoProductoColorPersonalizado").hidden=!personalizado;
+function opcionesCategoria(incluirPlaceholder=true){
+  const placeholder=incluirPlaceholder?'<option value="">Seleccionar categoría...</option>':"";
+  const categorias=categoriasDisponibles().map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  return `${placeholder}${categorias}<option value="${escapeHtml(SIN_CATEGORIA)}">${SIN_CATEGORIA}</option><option value="${NUEVA_CATEGORIA}">Nueva categoría...</option>`;
+}
+function actualizarOpcionesCategoriaNueva(){
+  document.getElementById("nuevoProductoCategoria").innerHTML=opcionesCategoria();
+}
+document.getElementById("nuevoProductoCategoria").addEventListener("change",()=>{
+  const nueva=document.getElementById("nuevoProductoCategoria").value===NUEVA_CATEGORIA;
+  const input=document.getElementById("nuevoProductoCategoriaNueva");
+  input.hidden=!nueva;
+  input.required=nueva;
 });
 async function supabaseGet(path){const r=await fetch(API+path,{headers});if(!r.ok)throw new Error(await r.text()||(`HTTP ${r.status}`));return r.json();}
 async function supabasePost(path, body){const r=await fetch(API+path,{method:"POST",headers:{...headers,"Prefer":"resolution=merge-duplicates,return=representation"},body:JSON.stringify(body)});const txt=await r.text();if(!r.ok)throw new Error(txt||(`HTTP ${r.status}`));try{return txt?JSON.parse(txt):[];}catch{return [];}}
@@ -306,7 +344,8 @@ async function cargarDatosIniciales(){
     fechaInput.value=fechaLocalISO();
     renderizarTipos();
     PRODUCTOS=await supabaseGet("/productos?activo=eq.true&order=orden.asc");
-    ordenarProductosPorColor();
+    ordenarProductosPorCategoria();
+    actualizarOpcionesCategoriaNueva();
     USUARIOS=await supabaseGet("/usuarios?activo=eq.true&order=nombre.asc");
     usuarioInput.innerHTML='<option value="">Seleccionar usuario...</option>'+USUARIOS.map(u=>`<option value="${u.id}">${escapeHtml(u.nombre)}</option>`).join("");
     const porDefecto=USUARIOS.find(u=>String(u.nombre||"").toLowerCase().includes("jhasmin"))||(USUARIOS.length===1?USUARIOS[0]:null);
@@ -333,25 +372,30 @@ function renderizarSelector(){
     const label=document.createElement("div");label.className="selector-item";
     const check=document.createElement("input");check.type="checkbox";check.checked=seleccionPendiente.has(String(p.id));check.dataset.selectorProducto=String(p.id);
     check.addEventListener("change",()=>{if(check.checked)seleccionPendiente.add(String(p.id));else seleccionPendiente.delete(String(p.id));actualizarContadorSelector();});
-    const name=document.createElement("span");name.textContent=p.nombre;
-    const colorSelect=document.createElement("select");colorSelect.innerHTML=opcionesColorProducto(false);
-    colorSelect.setAttribute("aria-label",`Cambiar color de ${p.nombre}`);
-    const customColor=document.createElement("input");customColor.type="color";customColor.className="product-color-picker";customColor.value=colorProducto(p)||"#8A94A6";
-    customColor.setAttribute("aria-label",`Elegir nuevo color para ${p.nombre}`);customColor.title=`Elegir nuevo color para ${p.nombre}`;
-    if(p.color===null||p.color===""){colorSelect.value="sin_asignar";customColor.hidden=true;}
-    else if(esColorCatalogo(p.color)){colorSelect.value=COLORES_PRODUCTO.find(c=>c.hex.toLowerCase()===String(p.color).toLowerCase()).hex;customColor.hidden=true;}
-    else{colorSelect.value=COLOR_PERSONALIZADO;customColor.hidden=false;}
-    colorSelect.addEventListener("change",()=>{
-      const esPersonalizado=colorSelect.value===COLOR_PERSONALIZADO;
-      customColor.hidden=!esPersonalizado;
-      if(colorSelect.value==="sin_asignar")guardarColorProducto(p,null,colorSelect,customColor);
-      else if(!esPersonalizado&&colorSelect.value)guardarColorProducto(p,colorSelect.value,colorSelect,customColor);
+    const name=document.createElement("span");name.className="selector-item-name";
+    const categoria=categoriaProducto(p);
+    name.innerHTML=`${escapeHtml(p.nombre)}<span class="product-category" style="${estiloCategoria(categoria)}">${escapeHtml(categoria)}</span>`;
+    const categorySelect=document.createElement("select");categorySelect.innerHTML=opcionesCategoria(false);
+    categorySelect.value=categoriaProducto(p);
+    categorySelect.setAttribute("aria-label",`Cambiar categoría de ${p.nombre}`);
+    const categoryEdit=document.createElement("div");categoryEdit.className="category-edit";categoryEdit.hidden=true;
+    const categoryInput=document.createElement("input");categoryInput.type="text";categoryInput.maxLength=80;
+    categoryInput.placeholder="Nombre de la nueva categoría";categoryInput.setAttribute("aria-label",`Nueva categoría para ${p.nombre}`);
+    const saveCategory=document.createElement("button");saveCategory.type="button";saveCategory.className="btn-primary";saveCategory.textContent="Guardar";
+    saveCategory.addEventListener("click",()=>guardarCategoriaProducto(p,categoryInput.value,categorySelect,categoryEdit,categoryInput,saveCategory));
+    categoryInput.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();saveCategory.click();}});
+    categoryEdit.append(categoryInput,saveCategory);
+    categorySelect.addEventListener("change",()=>{
+      const nueva=categorySelect.value===NUEVA_CATEGORIA;
+      categoryEdit.hidden=!nueva;
+      categoryInput.required=nueva;
+      if(nueva){categoryInput.focus();return;}
+      guardarCategoriaProducto(p,categorySelect.value,categorySelect,categoryEdit,categoryInput,saveCategory);
     });
-    customColor.addEventListener("change",()=>guardarColorProducto(p,customColor.value,colorSelect,customColor));
     const remove=document.createElement("button");remove.type="button";remove.className="selector-item-remove";remove.textContent="Quitar";remove.setAttribute("aria-label",`Quitar ${p.nombre} del catálogo`);
     remove.dataset.removeProducto=String(p.id);
     remove.addEventListener("click",()=>quitarProducto(p.id));
-    label.append(check,name,colorSelect,customColor,remove);selectorLista.appendChild(label);
+    label.append(check,name,categorySelect,categoryEdit,remove);selectorLista.appendChild(label);
   });
   actualizarContadorSelector();
 }
@@ -361,48 +405,54 @@ function mostrarEstadoGestionCatalogo(texto,tipo){
   estado.textContent=texto;
   estado.className=`message product-manager-status ${tipo}`;
 }
-async function guardarColorProducto(producto,colorNuevo,colorSelect,colorPicker){
-  const colorAnterior=colorProducto(producto);
-  colorSelect.disabled=true;colorPicker.disabled=true;
+async function guardarCategoriaProducto(producto,categoria,selector,editor,input,button){
+  const categoriaAnterior=categoriaProducto(producto);
+  const categoriaNueva=String(categoria||"").trim();
+  if(!categoriaNueva){mostrarEstadoGestionCatalogo("Selecciona o escribe una categoría.","warning");return;}
+  if(categoriaNueva===NUEVA_CATEGORIA){mostrarEstadoGestionCatalogo("Escribe el nombre de la nueva categoría.","warning");return;}
+  if(categoriaNueva===categoriaAnterior){editor.hidden=true;return;}
+  selector.disabled=true;input.disabled=true;button.disabled=true;
   try{
-    const rows=await supabaseRpc("actualizar_color_producto",{p_producto_id:producto.id,p_color:colorNuevo});
-    if(!Array.isArray(rows)||!rows.length)throw new Error("Supabase no confirmó el cambio de color.");
-    producto.color=rows[0].color??colorNuevo;
-    colorPicker.value=colorProducto(producto)||"#8A94A6";
-    colorSelect.value=producto.color===null?"sin_asignar":esColorCatalogo(producto.color)?COLORES_PRODUCTO.find(c=>c.hex.toLowerCase()===String(producto.color).toLowerCase()).hex:COLOR_PERSONALIZADO;
-    colorPicker.hidden=colorSelect.value!==COLOR_PERSONALIZADO;
-    ordenarProductosPorColor();
+    const rows=await supabaseRpc("actualizar_categoria_producto",{p_producto_id:producto.id,p_categoria:categoriaNueva});
+    if(!Array.isArray(rows)||!rows.length)throw new Error("Supabase no confirmó el cambio de categoría.");
+    producto.categoria=rows[0].categoria||categoriaNueva;
+    ordenarProductosPorCategoria();
+    actualizarOpcionesCategoriaNueva();
     renderizarSelector();
-    const tarjeta=Array.from(productosContainer.querySelectorAll("[data-product-card]")).find(card=>card.dataset.productCard===String(producto.id));
-    if(tarjeta)tarjeta.style.borderLeftColor=colorProducto(producto);
-    mostrarEstadoGestionCatalogo(`Color de "${producto.nombre}" actualizado.`,"success");
+    mostrarEstadoGestionCatalogo(`Categoría de "${producto.nombre}" actualizada: ${categoriaProducto(producto)}.`,"success");
   }catch(e){
     console.error(e);
-    colorPicker.value=colorAnterior||"#8A94A6";
-    colorSelect.value=colorAnterior===null?"sin_asignar":esColorCatalogo(colorAnterior)?COLORES_PRODUCTO.find(c=>c.hex.toLowerCase()===String(colorAnterior).toLowerCase()).hex:COLOR_PERSONALIZADO;
-    colorPicker.hidden=colorSelect.value!==COLOR_PERSONALIZADO;
-    mostrarEstadoGestionCatalogo("No se pudo actualizar el color: "+e.message,"warning");
-  }finally{colorSelect.disabled=false;colorPicker.disabled=false;}
+    selector.value=categoriaAnterior;
+    editor.hidden=true;
+    mostrarEstadoGestionCatalogo("No se pudo actualizar la categoría: "+e.message,"warning");
+  }finally{selector.disabled=false;input.disabled=false;button.disabled=false;}
 }
-async function anadirProducto(nombre,color){
+async function anadirProducto(nombre,categoria){
   const nombreNormalizado=nombre.trim();
   if(!nombreNormalizado){mostrarEstadoGestionCatalogo("Escribe el nombre del producto.","warning");return;}
+  const categoriaNormalizada=String(categoria||"").trim();
+  if(!categoriaNormalizada){mostrarEstadoGestionCatalogo("Selecciona una categoría o escribe el nombre de la nueva.","warning");return;}
+  if(categoriaNormalizada===NUEVA_CATEGORIA){mostrarEstadoGestionCatalogo("Escribe el nombre de la nueva categoría.","warning");return;}
   if(PRODUCTOS.some(p=>String(p.nombre).trim().toLocaleLowerCase("es")===nombreNormalizado.toLocaleLowerCase("es"))){
     mostrarEstadoGestionCatalogo("Ya existe un producto activo con ese nombre.","warning");return;
   }
   const boton=document.getElementById("anadirProductoBtn");boton.disabled=true;
   try{
-    const rows=await supabaseRpc("agregar_producto_con_color",{p_nombre:nombreNormalizado,p_color:color});
+    const rows=await supabaseRpc("agregar_producto_con_categoria",{p_nombre:nombreNormalizado,p_categoria:categoriaNormalizada});
     const productoGuardado=Array.isArray(rows)?rows.find(p=>p.id!==undefined):null;
     if(!productoGuardado)throw new Error("Supabase no confirmó la creación del producto.");
     PRODUCTOS.push(productoGuardado);
-    ordenarProductosPorColor();
+    ordenarProductosPorCategoria();
+    actualizarOpcionesCategoriaNueva();
     seleccionPendiente.add(String(productoGuardado.id));
     document.getElementById("nuevoProductoNombre").value="";
-    document.getElementById("nuevoProductoColor").value="";
-    document.getElementById("nuevoProductoColorPersonalizado").hidden=true;
+    document.getElementById("nuevoProductoCategoria").value="";
+    const nuevaCategoria=document.getElementById("nuevoProductoCategoriaNueva");
+    nuevaCategoria.value="";
+    nuevaCategoria.hidden=true;
+    nuevaCategoria.required=false;
     renderizarSelector();
-    const texto=`Producto "${productoGuardado.nombre}" guardado en la base de datos. Pulsa APLICAR SELECCIÓN para incluirlo en este día.`;
+    const texto=`Producto "${productoGuardado.nombre}" guardado en la categoría "${categoriaProducto(productoGuardado)}". Pulsa APLICAR SELECCIÓN para incluirlo en este día.`;
     mostrarEstadoGestionCatalogo(texto,"success");
     mostrarMensaje(texto,"success");
   }catch(e){
@@ -453,9 +503,9 @@ async function quitarProducto(id){
 }
 document.getElementById("nuevoProductoForm").addEventListener("submit",event=>{
   event.preventDefault();
-  const selector=document.getElementById("nuevoProductoColor");
-  const color=selector.value==="sin_asignar"?null:selector.value===COLOR_PERSONALIZADO?document.getElementById("nuevoProductoColorPersonalizado").value:selector.value;
-  anadirProducto(document.getElementById("nuevoProductoNombre").value,color);
+  const selector=document.getElementById("nuevoProductoCategoria");
+  const categoria=selector.value===NUEVA_CATEGORIA?document.getElementById("nuevoProductoCategoriaNueva").value:selector.value;
+  anadirProducto(document.getElementById("nuevoProductoNombre").value,categoria);
 });
 selectorSearch.addEventListener("input",renderizarSelector);
 document.getElementById("seleccionarTodos").addEventListener("click",()=>{PRODUCTOS.forEach(p=>seleccionPendiente.add(String(p.id)));renderizarSelector();});
@@ -492,7 +542,7 @@ function crearProductos(){
   lista.forEach((p)=>{
     const numero=PRODUCTOS.findIndex(x=>String(x.id)===String(p.id))+1;
     const b=document.createElement("div");b.className="product";b.dataset.productCard=String(p.id);
-    b.style.borderLeftColor=colorProducto(p)||"transparent";
+    b.style.setProperty("--category-color",coloresCategoria(categoriaProducto(p))[0]);
     b.innerHTML=`<div class="product-name">${nombreProductoControl(p,numero)}</div>
       <div class="fields">
         <div><div class="field-title">INICIAL</div><input type="number" min="0" step="1" data-producto="${p.id}" data-campo="inicial" inputmode="numeric"></div>
@@ -520,7 +570,7 @@ function calcularProducto(id){
 function actualizarCalculos(){PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).forEach(p=>calcularProducto(p.id));}
 
 function actualizarProgreso(){
-  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
+  const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id))).sort(compararProductosPorCategoria);
   let n=0;
   lista.forEach(p=>{const ok=["inicial","reposicion","sobrante","merma"].some(c=>{const el=document.querySelector(`[data-producto="${p.id}"][data-campo="${c}"]`);return el&&el.value!=="";});if(ok)n++;});
   const pct=Math.round((n/(lista.length||1))*100);
@@ -613,16 +663,16 @@ function generarExcel(){
     const fechaEnEspanol=new Intl.DateTimeFormat("es-ES",{day:"numeric",month:"long",year:"numeric"}).format(fecha);
     const libro=new ExcelJS.Workbook();
     const hoja=libro.addWorksheet("Control diario",{
-      pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:`A1:E${lista.length+2}`,margins:{left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2}}
+      pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,printArea:`A1:F${lista.length+2}`,margins:{left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2}}
     });
-    hoja.columns=[{width:38},{width:16},{width:16},{width:16},{width:16}];
-    hoja.mergeCells("A1:E1");
+    hoja.columns=[{width:38},{width:25},{width:16},{width:16},{width:16},{width:16}];
+    hoja.mergeCells("A1:F1");
     const titulo=hoja.getCell("A1");
     titulo.value=`CONTROL DIARIO — ${diaSemana} ${fechaEnEspanol}`;
     titulo.font={name:"Arial",size:14,bold:true};
     titulo.alignment={horizontal:"center",vertical:"middle"};
     hoja.getRow(1).height=30;
-    const encabezados=["PRODUCTOS","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
+    const encabezados=["PRODUCTOS","CATEGORÍA","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
     const bordeTabla={style:"thin",color:{argb:"FFB7B7B7"}};
     const estiloBordes={top:bordeTabla,left:bordeTabla,bottom:bordeTabla,right:bordeTabla};
     const filas=lista.map(p=>{
@@ -630,7 +680,7 @@ function generarExcel(){
         const input=document.querySelector(`[data-producto="${p.id}"][data-campo="${campo}"]`);
         return input&&input.value!==""?Number(input.value):"";
       };
-      return [p.nombre,obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma")];
+      return [p.nombre,categoriaProducto(p),obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma")];
     });
     const filaEncabezados=hoja.addRow(encabezados);
     filaEncabezados.height=22;
@@ -757,7 +807,6 @@ function limpiarFormulario(){
   estado("sin");
 }
 
-renderizarOpcionColorNuevo();
 cargarDatosIniciales();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>

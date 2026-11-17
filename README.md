@@ -29,11 +29,11 @@ El indicador de progreso cuenta los productos que tienen al menos un campo relle
 
 En **Seleccionar productos del día**, la sección **Gestionar catálogo de productos** permite:
 
-- **Añadir** un producto por su nombre y eligiendo el color en el desplegable (Sin asignar, Verde, Rojo, Gris, Azul o Amarillo). La opción **Nuevo color...** permite elegir un color personalizado.
-- **Cambiar el color** de un producto con el desplegable junto a su nombre; también permite dejarlo **Sin asignar** o definir un color personalizado.
+- **Añadir** un producto por su nombre y asignándole una categoría existente. La opción **Nueva categoría...** permite crear otra categoría.
+- **Cambiar la categoría** de un producto desde el desplegable junto a su nombre. Las categorías nuevas se pueden crear al asignarlas.
 - **Quitar** un producto del catálogo activo usando el botón junto a su nombre. La aplicación pide confirmación y conserva los registros históricos del producto.
 
-Los productos se ordenan por color (Verde, Rojo, Gris, Azul y Amarillo); después aparecen los colores personalizados y, al final, los productos sin color asignado. Para habilitar esta función, ejecuta en orden los scripts de `supabase/migrations/` en **Supabase → SQL Editor**. Si ya ejecutaste `20261117123000_product_color.sql`, ejecuta también `20261117130700_product_color_unassigned.sql` para conservar como **Sin asignar** los productos que así aparecen en el catálogo. Las migraciones añaden `productos.color`, asignan los colores indicados y actualizan las funciones de gestión. La gestión modifica el catálogo compartido, no solo el formulario local. Si aparece un error al gestionar el catálogo, avisa a la persona responsable de la aplicación.
+Los productos se ordenan por categoría (**PANINI CLUB**, **SANDWICH PANINI GRILL**, **POKE & FRIENDS**, **CRAB & GO**, **THE SPOON** y **CELIACO**), después las categorías nuevas en orden alfabético y, al final, **Sin categoría**. Cada categoría tiene un distintivo de color consistente en el control diario y el Dashboard; las categorías nuevas reciben un color automáticamente. Es una ayuda visual y no requiere guardar colores en Supabase. Para habilitar la clasificación, ejecuta `supabase/migrations/20261117140000_product_category.sql` en **Supabase → SQL Editor**. Esta migración añade `productos.categoria`, importa las asignaciones exactas de `productos_con_categoria.xlsx` y crea las funciones para añadir productos y actualizar categorías. Los nombres que no coincidan exactamente con los de la hoja conservan **Sin categoría**. La columna antigua `productos.color` no se borra, pero deja de utilizarse en la aplicación. La migración está en una carpeta excluida de Git por petición del usuario; hay que ejecutarla desde el archivo local, no se incluirá al publicar el código. La gestión modifica el catálogo compartido, no solo el formulario local.
 
 ## Consultar el Dashboard
 
@@ -42,11 +42,13 @@ En `dashboard.html` puedes filtrar los resúmenes por periodo y trabajador. En l
 El Dashboard muestra:
 
 - **Resumen del periodo**: consumo estimado, merma, registros, días con datos, unidades iniciales, reposición y sobrante.
-- **Comparativas y gráficos**: consumo por trabajador y producto, y los productos con más y menos consumo.
+- **Comparativas y gráficos**: consumo por trabajador y producto, y los productos con más y menos consumo; las tablas y previsiones muestran la categoría de cada producto.
 - **Previsión para mañana**: utiliza hasta 12 registros de los últimos 120 días del mismo día de la semana. Si hay menos de dos registros, no presenta una estimación; con dos o tres, la marca como provisional. Si hay menos de dos de ese día de la semana, puede recurrir a hasta 12 registros de otros días, indicado con `*`.
 - **Preparar**: consumo estimado para mañana menos el sobrante registrado hoy, con un mínimo de cero.
 - **Precisión de la previsión** e **Historial reciente**.
-- **Exportar CSV**: descarga los registros para abrirlos en una hoja de cálculo.
+- **Exportar CSV**: descarga los registros para abrirlos en una hoja de cálculo, incluida la categoría del producto.
+
+El Excel generado desde el control diario también incluye una columna de categoría y ordena los productos por categoría.
 
 La previsión es orientativa. No cambia al filtrar por trabajador: se calcula para toda la tienda. El sobrante de hoy se suma entre los registros de los usuarios.
 
