@@ -706,13 +706,14 @@ function obtenerFilasProductoOCR(lineas,productos){
   }
   return {anclas,centros,paso};
 }
-function analizarCeldasOCR(palabras,productos){
+function analizarCeldasOCR(palabras,productos,lecturasNumericas=[]){
+  const palabrasConCaja=palabras.filter(w=>w.text&&w.bbox);
   const validas=palabras.filter(w=>w.text&&w.bbox&&Number(w.confidence??0)>=15);
   const lineas=agruparPalabrasOCR(validas);
   const nombresCampos=["inicial","reposicion","sobrante","merma"];
   const centrosColumnas={};
   nombresCampos.forEach(campo=>{
-    const header=validas.find(w=>normalizarOCR(w.text)===normalizarOCR(campo));
+    const header=palabrasConCaja.find(w=>normalizarOCR(w.text)===normalizarOCR(campo));
     if(header)centrosColumnas[campo]=(header.bbox.x0+header.bbox.x1)/2;
   });
   if(nombresCampos.some(campo=>centrosColumnas[campo]===undefined)){
@@ -723,34 +724,102 @@ function analizarCeldasOCR(palabras,productos){
   const {anclas,centros,paso}=obtenerFilasProductoOCR(lineas,productos);
   const indicesReconocidos=new Set(anclas.map(ancla=>ancla.index));
   const celdas=productos.map(()=>Object.fromEntries(nombresCampos.map(campo=>[campo,null])));
-  const numeros=validas.map(w=>{
-    const normalizado=w.text.replace(/[oO]/g,"0").replace(/[Il|]/g,"1").replace(/[,.:]$/g,"");
-    if(!/^\d+$/.test(normalizado))return null;
-    return {...w,valor:normalizado,x:(w.bbox.x0+w.bbox.x1)/2,y:(w.bbox.y0+w.bbox.y1)/2};
-  }).filter(Boolean);
-  numeros.forEach(word=>{
-    const col=nombresCampos.reduce((best,campo)=>Math.abs(centrosColumnas[campo]-word.x)<Math.abs(centrosColumnas[best]-word.x)?campo:best,nombresCampos[0]);
-    const colIndex=nombresCampos.indexOf(col);
-    const limiteCol=colIndex===0
-      ?(centrosColumnas[nombresCampos[1]]-centrosColumnas[col])/2
-      :(colIndex===nombresCampos.length-1
-        ?(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]])/2
-        :Math.min(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]],centrosColumnas[nombresCampos[colIndex+1]]-centrosColumnas[col])/2);
-    if(Math.abs(centrosColumnas[col]-word.x)>limiteCol)return;
-    let row=0;
-    for(let i=1;i<centros.length;i++)if(Math.abs(centros[i]-word.y)<Math.abs(centros[row]-word.y))row=i;
-    const rowLimit=Math.max(8,paso*0.62);
-    if(!indicesReconocidos.has(row)||Math.abs(centros[row]-word.y)>rowLimit)return;
-    const celda=celdas[row][col];
-    if(!celda)celdas[row][col]={valor:word.valor,confianza:Number(word.confidence??0),x:word.x};
-    else{
-      const palabrasCelda=[celda,{valor:word.valor,confianza:Number(word.confidence??0),x:word.x}].sort((a,b)=>a.x-b.x);
-      celdas[row][col]={valor:palabrasCelda.map(x=>x.valor).join(""),confianza:Math.min(...palabrasCelda.map(x=>x.confianza)),x:palabrasCelda[0].x};
-    }
+  const lecturasPorCelda=productos.map(()=>Object.fromEntries(nombresCampos.map(campo=>[campo,[]])));
+  lecturasNumericas.forEach(lectura=>{
+    const mejoresDeLectura=new Map();
+    lectura.forEach(word=>{
+      const normalizado=String(word.text||"").replace(/[oO]/g,"0").replace(/[Il|]/g,"1").replace(/[,.:]$/g,"");
+      if(!/^\d{1,3}$/.test(normalizado)||!word.bbox||Number(word.confidence??0)<15)return;
+      const x=(word.bbox.x0+word.bbox.x1)/2,y=(word.bbox.y0+word.bbox.y1)/2+2;
+      const col=nombresCampos.reduce((best,campo)=>Math.abs(centrosColumnas[campo]-x)<Math.abs(centrosColumnas[best]-x)?campo:best,nombresCampos[0]);
+      const colIndex=nombresCampos.indexOf(col);
+      const limiteCol=colIndex===0
+        ?(centrosColumnas[nombresCampos[1]]-centrosColumnas[col])/2
+        :(colIndex===nombresCampos.length-1
+          ?(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]])/2
+          :Math.min(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]],centrosColumnas[nombresCampos[colIndex+1]]-centrosColumnas[col])/2);
+      if(Math.abs(centrosColumnas[col]-x)>limiteCol)return;
+      let row=0;
+      for(let i=1;i<centros.length;i++)if(Math.abs(centros[i]-y)<Math.abs(centros[row]-y))row=i;
+      if(Math.abs(centros[row]-y)>Math.max(8,paso*0.62))return;
+      const key=`${row}:${col}`;
+      const anterior=mejoresDeLectura.get(key);
+      if(!anterior||Number(word.confidence??0)>anterior.confianza){
+        mejoresDeLectura.set(key,{row,col,valor:normalizado,confianza:Number(word.confidence??0)});
+      }
+    });
+    mejoresDeLectura.forEach(dato=>lecturasPorCelda[dato.row][dato.col].push(dato));
+  });
+  lecturasPorCelda.forEach((fila,row)=>{
+    nombresCampos.forEach(col=>{
+      const lecturas=fila[col];
+      if(!lecturas.length)return;
+      const votos=new Map();
+      lecturas.forEach(lectura=>{
+        if(!votos.has(lectura.valor))votos.set(lectura.valor,[]);
+        votos.get(lectura.valor).push(lectura.confianza);
+      });
+      const candidatos=[...votos.entries()].sort((a,b)=>{
+        const calidadA=a[1].reduce((s,c)=>s+c,0),calidadB=b[1].reduce((s,c)=>s+c,0);
+        return calidadB-calidadA||b[1].length-a[1].length;
+      });
+      const [valor,confianzas]=candidatos[0];
+      const acuerdo=candidatos.length===1;
+      const confianza=acuerdo&&confianzas.length>1
+        ?Math.min(95,55+confianzas.reduce((s,c)=>s+c,0)/confianzas.length*0.35+(confianzas.length-2)*5)
+        :Math.min(54,Math.max(15,confianzas.reduce((s,c)=>s+c,0)/confianzas.length*0.5));
+      celdas[row][col]={valor,confianza};
+      indicesReconocidos.add(row);
+    });
   });
   const cantidad=celdas.reduce((total,row)=>total+Object.values(row).filter(Boolean).length,0);
   if(!cantidad)throw new Error("No se detectaron números escritos en la tabla. Puedes introducirlos manualmente.");
   return {celdas,cantidad,indicesReconocidos:[...indicesReconocidos]};
+}
+function crearVariantesOCR(canvas){
+  const ancho=canvas.width,alto=canvas.height,ctx=canvas.getContext("2d",{willReadFrequently:true});
+  if(!ctx)throw new Error("No se pudo preparar la foto para mejorar el reconocimiento.");
+  const original=ctx.getImageData(0,0,ancho,alto);
+  const total=ancho*alto,grises=new Uint8Array(total),integral=new Uint32Array((ancho+1)*(alto+1));
+  for(let i=0;i<total;i++){
+    const pixel=i*4;
+    grises[i]=Math.round((original.data[pixel]+original.data[pixel+1]+original.data[pixel+2])/3);
+  }
+  for(let y=1;y<=alto;y++){
+    let sumaFila=0;
+    for(let x=1;x<=ancho;x++){
+      sumaFila+=grises[(y-1)*ancho+x-1];
+      integral[y*(ancho+1)+x]=integral[(y-1)*(ancho+1)+x]+sumaFila;
+    }
+  }
+  const variantes=[];
+  for(const modo of ["grises","contraste","azul"]){
+    const imagen=document.createElement("canvas");
+    imagen.width=ancho;imagen.height=alto;
+    const salida=imagen.getContext("2d");
+    if(!salida)throw new Error("No se pudo preparar una versión mejorada de la foto.");
+    const datos=salida.createImageData(ancho,alto);
+    for(let y=0;y<alto;y++){
+      for(let x=0;x<ancho;x++){
+        const indice=y*ancho+x,pixel=indice*4;
+        let valor;
+        if(modo==="grises")valor=grises[indice];
+        else if(modo==="azul")valor=original.data[pixel+2]-original.data[pixel]>18&&original.data[pixel]<190?0:255;
+        else{
+          const x0=Math.max(0,x-7),x1=Math.min(ancho-1,x+7),y0=Math.max(0,y-7),y1=Math.min(alto-1,y+7);
+          const a=integral[y0*(ancho+1)+x0],b=integral[y0*(ancho+1)+x1+1];
+          const c=integral[(y1+1)*(ancho+1)+x0],d=integral[(y1+1)*(ancho+1)+x1+1];
+          const media=(d-b-c+a)/((x1-x0+1)*(y1-y0+1));
+          valor=grises[indice]<media-12?0:255;
+        }
+        datos.data[pixel]=datos.data[pixel+1]=datos.data[pixel+2]=valor;
+        datos.data[pixel+3]=255;
+      }
+    }
+    salida.putImageData(datos,0,0);
+    variantes.push(imagen);
+  }
+  return variantes;
 }
 function cargarScriptOCR(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);
@@ -810,7 +879,18 @@ async function leerFotoControl(){
       await workerOCR.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1"});
     }
     const resultado=await workerOCR.recognize(canvas);
-    const analisis=analizarCeldasOCR(resultado.data.words||[],lista);
+    mostrarEstadoFoto("Mejorando contraste y leyendo los números con varios filtros locales…");
+    const lecturasNumericas=[];
+    try{
+      await workerOCR.setParameters({tessedit_pageseg_mode:"11",tessedit_char_whitelist:"0123456789"});
+      for(const variante of crearVariantesOCR(canvas)){
+        const lectura=await workerOCR.recognize(variante);
+        lecturasNumericas.push(lectura.data.words||[]);
+      }
+    }finally{
+      await workerOCR.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1",tessedit_char_whitelist:""});
+    }
+    const analisis=analizarCeldasOCR(resultado.data.words||[],lista,lecturasNumericas);
     const productosReconocidos=analisis.indicesReconocidos.map(index=>lista[index]);
     const idsReconocidos=new Set(productosReconocidos.map(p=>String(p.id)));
     const entradasReconocidas=Array.from(productosContainer.querySelectorAll('input[type="number"][data-producto]'))
