@@ -31,6 +31,11 @@ button:disabled{opacity:.6;cursor:default}
 .product-name{font-weight:bold;font-size:14px;margin-bottom:10px}
 .product-category{display:inline-block;font-size:10px;color:var(--category-text,#657786);background:var(--category-bg,#edf1f4);font-weight:bold;margin-top:4px;padding:3px 8px;border-radius:999px}
 .photo-loader{border-top:1px solid #e2e9ee;margin-bottom:12px;padding-top:12px}
+.photo-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.photo-heading .section-title{margin-bottom:8px}
+.camera-button{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;padding:0;margin-bottom:8px;background:#e9eef3;color:#173F5F}
+.camera-button svg{width:24px;height:24px}
+.camera-input{display:none}
 .photo-preview{display:block;width:100%;max-height:320px;object-fit:contain;margin-top:10px;border:1px solid #e2e9ee;border-radius:10px;background:#f7fafc}
 .photo-status{margin-top:8px;font-size:12px;line-height:1.4}
 .photo-status.success{color:#19724a}
@@ -38,9 +43,11 @@ button:disabled{opacity:.6;cursor:default}
 .photo-status[hidden],.photo-preview[hidden]{display:none}
 .photo-pending{background:#fff4df;color:#8a5a00;padding:10px;border-radius:10px;margin-bottom:10px;font-size:12px}
 .photo-pending[hidden]{display:none}
-.ocr-low-confidence{border-color:#d58b00!important;background:#fff9e8!important}
+.photo-low-confidence{border-color:#d58b00!important;background:#fff9e8!important}
 .photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .photo-actions button{min-height:44px}
+.photo-actions .openai-photo-button{grid-column:1/-1;grid-row:1;background:#173F5F;color:#fff}
+.openai-access-help{margin-top:5px}
 .fields{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .field-title{font-size:10px;font-weight:bold;color:#657786;text-align:center;margin-bottom:4px}
 .fields input{padding:9px 5px}
@@ -153,13 +160,23 @@ button:disabled{opacity:.6;cursor:default}
   </button>
   <div id="productosControlPanel" class="selector-panel" hidden>
     <div class="photo-loader">
-      <div class="section-title">Cargar datos desde una foto</div>
-      <div class="muted">Haz una foto ahora o elige una imagen de la galería. El reconocimiento se procesa en este navegador; revisa los campos y pulsa GUARDAR CONTROL. La imagen no se envía a Supabase.</div>
-      <label for="fotoControl">Hacer foto o elegir de la galería</label>
-      <input id="fotoControl" type="file" accept="image/*">
+      <div class="photo-heading">
+        <div class="section-title">Cargar datos desde foto</div>
+        <button type="button" class="camera-button" id="abrirCamaraBtn" aria-label="Abrir cámara" title="Hacer una foto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 4H10L8 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-4z"></path>
+            <circle cx="12" cy="14" r="3"></circle>
+          </svg>
+        </button>
+      </div>
+      <input id="fotoControl" class="camera-input" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+      <div class="muted">Pulsa el icono para abrir la cámara y hacer una foto. LEER CON OPENAI envía la imagen a través de Supabase y puede generar un coste. Revisa los campos y pulsa GUARDAR CONTROL.</div>
       <img id="fotoControlPreview" class="photo-preview" alt="Vista previa de la hoja fotografiada" hidden>
+      <label for="openaiAccessCode">Código de acceso a la lectura con OpenAI</label>
+      <input id="openaiAccessCode" type="password" maxlength="128" autocomplete="off" placeholder="El código configurado en Supabase">
+      <div class="muted openai-access-help">No es tu clave de OpenAI. Se recuerda en esta pestaña hasta que la cierres; no está incluida en el código de la aplicación.</div>
       <div class="photo-actions">
-        <button type="button" class="btn-primary" id="leerFotoBtn" disabled>LEER FOTO</button>
+        <button type="button" class="openai-photo-button" id="leerFotoOpenAIBtn" disabled>LEER CON OPENAI</button>
         <button type="button" class="btn-secondary" id="limpiarFotoBtn" disabled>QUITAR FOTO</button>
       </div>
       <div id="fotoControlEstado" class="photo-status" role="status" aria-live="polite" hidden></div>
@@ -187,10 +204,12 @@ button:disabled{opacity:.6;cursor:default}
 const SUPABASE_URL = "https://dsgjwaovruukvlezcdnp.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6hvO0W5rYKVpSgGuWBXnTA_J8CtzfqS";
 const API = SUPABASE_URL + "/rest/v1";
+const OPENAI_READ_ENDPOINT = SUPABASE_URL + "/functions/v1/read-control-photo";
 const headers = { "apikey": SUPABASE_KEY, "Content-Type": "application/json" };
 
 const HORA_AVISO = 20;              // a partir de esta hora se avisa de productos sin registrar hoy
 const COLA_KEY = "control_diario_pendientes";
+const OPENAI_ACCESS_CODE_SESSION_KEY = "control_diario_openai_access_code";
 const TIPOS_DIA = ["Normal", "Festivo", "Evento", "Cierre parcial"];
 const CATEGORIAS_BASE = ["PANINI CLUB","SANDWICH PANINI GRILL","POKE & FRIENDS","CRAB & GO","THE SPOON","CELIACO"];
 const SIN_CATEGORIA = "Sin categoría";
@@ -209,11 +228,10 @@ let fotoControlUrl = null;
 let datosFotoPendientes = false;
 let fechaBorradorFoto = null;
 let usuarioBorradorFoto = null;
-let workerOCR = null;
-let scriptOCRPromise = null;
 const fechaInput = document.getElementById("fecha");
 const tipoDiaInput = document.getElementById("tipoDia");
 const usuarioInput = document.getElementById("usuario");
+const openaiAccessCodeInput = document.getElementById("openaiAccessCode");
 const productosContainer = document.getElementById("productos");
 const selectorToggle = document.getElementById("selectorToggle");
 const selectorPanel = document.getElementById("selectorPanel");
@@ -222,10 +240,12 @@ const selectorSearch = document.getElementById("selectorSearch");
 const productosControlToggle = document.getElementById("productosControlToggle");
 const productosControlPanel = document.getElementById("productosControlPanel");
 const productosControlTitulo = document.getElementById("productosControlTitulo");
+openaiAccessCodeInput.value=sessionStorage.getItem(OPENAI_ACCESS_CODE_SESSION_KEY)||"";
 
 function fechaLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function escapeHtml(text){return String(text).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 function categoriaProducto(producto){return String(producto.categoria||"").trim()||SIN_CATEGORIA;}
+function abreviaturaCategoria(categoria){return (categoria.match(/[\p{L}\p{N}]+/gu)||[]).map(palabra=>Array.from(palabra)[0]).join("").toUpperCase();}
 const COLORES_CATEGORIA={
   "PANINI CLUB":["#438A5E","#E8F4EB"],
   "SANDWICH PANINI GRILL":["#A96A25","#FBF0E2"],
@@ -606,237 +626,16 @@ function establecerBorradorFoto(activo){
   document.getElementById("fotoDatosPendientes").hidden=!activo;
   if(!activo){
     fechaBorradorFoto=null;usuarioBorradorFoto=null;
-    productosContainer.querySelectorAll(".ocr-low-confidence").forEach(input=>{
-      input.classList.remove("ocr-low-confidence");
+    productosContainer.querySelectorAll(".photo-low-confidence").forEach(input=>{
+      input.classList.remove("photo-low-confidence");
       input.removeAttribute("title");
     });
   }
 }
-function normalizarOCR(texto){
+function normalizarTexto(texto){
   return String(texto||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
 }
-function distanciaTexto(a,b){
-  const fila=Array.from({length:b.length+1},(_,i)=>i);
-  for(let i=1;i<=a.length;i++){
-    let diagonal=fila[0];
-    fila[0]=i;
-    for(let j=1;j<=b.length;j++){
-      const anterior=fila[j];
-      fila[j]=Math.min(fila[j]+1,fila[j-1]+1,diagonal+(a[i-1]===b[j-1]?0:1));
-      diagonal=anterior;
-    }
-  }
-  return fila[b.length];
-}
-function agruparPalabrasOCR(palabras){
-  const grupos=new Map();
-  palabras.filter(w=>w.text&&w.bbox&&Number(w.confidence??0)>=15).forEach(w=>{
-    const b=w.bbox;
-    const key=[w.block_num??0,w.par_num??0,w.line_num??Math.round((b.y0+b.y1)/18)].join(":");
-    if(!grupos.has(key))grupos.set(key,[]);
-    grupos.get(key).push(w);
-  });
-  return [...grupos.values()].map(words=>{
-    words.sort((a,b)=>a.bbox.x0-b.bbox.x0);
-    return {words,text:words.map(w=>w.text).join(" "),y:words.reduce((sum,w)=>sum+(w.bbox.y0+w.bbox.y1)/2,0)/words.length};
-  }).sort((a,b)=>a.y-b.y);
-}
-function puntuacionNombreProducto(nombre,linea){
-  const esperados=String(nombre).split(/\s+/).map(normalizarOCR).filter(token=>token.length>1);
-  const encontrados=linea.words.map(w=>normalizarOCR(w.text)).filter(Boolean);
-  if(!esperados.length)return 0;
-  const coincidencias=esperados.filter(esperado=>encontrados.some(encontrado=>{
-    if(esperado===encontrado)return true;
-    if(Math.min(esperado.length,encontrado.length)<4)return false;
-    return 1-distanciaTexto(esperado,encontrado)/Math.max(esperado.length,encontrado.length)>=0.72;
-  })).length;
-  return coincidencias/esperados.length;
-}
-function obtenerFilasProductoOCR(lineas,productos){
-  const encabezados=new Set(["productos","inicial","reposicion","sobrante","merma"]);
-  const candidatas=lineas.filter(linea=>!linea.words.some(w=>encabezados.has(normalizarOCR(w.text))));
-  const puntuaciones=candidatas.map(linea=>productos.map(producto=>puntuacionNombreProducto(producto.nombre,linea)));
-  const filas=candidatas.length+1,columnas=productos.length+1;
-  const calidad=Array.from({length:filas},()=>Array(columnas).fill(0));
-  const cantidad=Array.from({length:filas},()=>Array(columnas).fill(0));
-  const acciones=Array.from({length:filas},()=>Array(columnas).fill(""));
-  const mejorQue=(calidadNueva,cantidadNueva,calidadActual,cantidadActual)=>
-    calidadNueva>calidadActual+1e-8||(Math.abs(calidadNueva-calidadActual)<=1e-8&&cantidadNueva>cantidadActual);
-  for(let i=1;i<filas;i++){
-    for(let j=1;j<columnas;j++){
-      calidad[i][j]=calidad[i-1][j];
-      cantidad[i][j]=cantidad[i-1][j];
-      acciones[i][j]="linea";
-      if(mejorQue(calidad[i][j-1],cantidad[i][j-1],calidad[i][j],cantidad[i][j])){
-        calidad[i][j]=calidad[i][j-1];
-        cantidad[i][j]=cantidad[i][j-1];
-        acciones[i][j]="producto";
-      }
-      const puntuacion=puntuaciones[i-1][j-1];
-      if(puntuacion>=0.5&&mejorQue(calidad[i-1][j-1]+puntuacion,cantidad[i-1][j-1]+1,calidad[i][j],cantidad[i][j])){
-        calidad[i][j]=calidad[i-1][j-1]+puntuacion;
-        cantidad[i][j]=cantidad[i-1][j-1]+1;
-        acciones[i][j]="coincidencia";
-      }
-    }
-  }
-  const anclas=[];
-  let i=candidatas.length,j=productos.length;
-  while(i>0&&j>0){
-    if(acciones[i][j]==="coincidencia"){
-      anclas.push({index:j-1,y:candidatas[i-1].y});
-      i--;j--;
-    }else if(acciones[i][j]==="producto")j--;
-    else i--;
-  }
-  anclas.reverse();
-  const minimoAnclas=Math.min(2,productos.length);
-  if(anclas.length<minimoAnclas)throw new Error(`Solo se reconocieron ${anclas.length} nombres de producto. Toma la foto de frente, con buena luz y al menos dos filas visibles.`);
-  const separaciones=[];
-  for(let i=1;i<anclas.length;i++)separaciones.push((anclas[i].y-anclas[i-1].y)/(anclas[i].index-anclas[i-1].index));
-  const paso=separaciones.length?separaciones.sort((a,b)=>a-b)[Math.floor(separaciones.length/2)]:28;
-  const centros=[];
-  for(let index=0;index<productos.length;index++){
-    const antes=[...anclas].reverse().find(a=>a.index<=index);
-    const despues=anclas.find(a=>a.index>=index);
-    if(antes&&despues){
-      centros[index]=antes.index===despues.index?antes.y:antes.y+(despues.y-antes.y)*(index-antes.index)/(despues.index-antes.index);
-    }else if(antes)centros[index]=antes.y+(index-antes.index)*paso;
-    else centros[index]=despues.y-(despues.index-index)*paso;
-  }
-  return {anclas,centros,paso};
-}
-function analizarCeldasOCR(palabras,productos,lecturasNumericas=[]){
-  const palabrasConCaja=palabras.filter(w=>w.text&&w.bbox);
-  const validas=palabras.filter(w=>w.text&&w.bbox&&Number(w.confidence??0)>=15);
-  const lineas=agruparPalabrasOCR(validas);
-  const nombresCampos=["inicial","reposicion","sobrante","merma"];
-  const centrosColumnas={};
-  nombresCampos.forEach(campo=>{
-    const header=palabrasConCaja.find(w=>normalizarOCR(w.text)===normalizarOCR(campo));
-    if(header)centrosColumnas[campo]=(header.bbox.x0+header.bbox.x1)/2;
-  });
-  if(nombresCampos.some(campo=>centrosColumnas[campo]===undefined)){
-    throw new Error("No se reconocieron todas las cabeceras numéricas. Asegúrate de que la hoja impresa esté enfocada y completamente visible.");
-  }
-  const xs=nombresCampos.map(campo=>centrosColumnas[campo]);
-  if(xs.some((x,i)=>i>0&&x<=xs[i-1]))throw new Error("Las columnas no se reconocieron en el orden esperado.");
-  const {anclas,centros,paso}=obtenerFilasProductoOCR(lineas,productos);
-  const indicesReconocidos=new Set(anclas.map(ancla=>ancla.index));
-  const celdas=productos.map(()=>Object.fromEntries(nombresCampos.map(campo=>[campo,null])));
-  const lecturasPorCelda=productos.map(()=>Object.fromEntries(nombresCampos.map(campo=>[campo,[]])));
-  lecturasNumericas.forEach(lectura=>{
-    const mejoresDeLectura=new Map();
-    lectura.forEach(word=>{
-      const normalizado=String(word.text||"").replace(/[oO]/g,"0").replace(/[Il|]/g,"1").replace(/[,.:]$/g,"");
-      if(!/^\d{1,3}$/.test(normalizado)||!word.bbox||Number(word.confidence??0)<15)return;
-      const x=(word.bbox.x0+word.bbox.x1)/2,y=(word.bbox.y0+word.bbox.y1)/2+2;
-      const col=nombresCampos.reduce((best,campo)=>Math.abs(centrosColumnas[campo]-x)<Math.abs(centrosColumnas[best]-x)?campo:best,nombresCampos[0]);
-      const colIndex=nombresCampos.indexOf(col);
-      const limiteCol=colIndex===0
-        ?(centrosColumnas[nombresCampos[1]]-centrosColumnas[col])/2
-        :(colIndex===nombresCampos.length-1
-          ?(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]])/2
-          :Math.min(centrosColumnas[col]-centrosColumnas[nombresCampos[colIndex-1]],centrosColumnas[nombresCampos[colIndex+1]]-centrosColumnas[col])/2);
-      if(Math.abs(centrosColumnas[col]-x)>limiteCol)return;
-      let row=0;
-      for(let i=1;i<centros.length;i++)if(Math.abs(centros[i]-y)<Math.abs(centros[row]-y))row=i;
-      if(Math.abs(centros[row]-y)>Math.max(8,paso*0.62))return;
-      const key=`${row}:${col}`;
-      const anterior=mejoresDeLectura.get(key);
-      if(!anterior||Number(word.confidence??0)>anterior.confianza){
-        mejoresDeLectura.set(key,{row,col,valor:normalizado,confianza:Number(word.confidence??0)});
-      }
-    });
-    mejoresDeLectura.forEach(dato=>lecturasPorCelda[dato.row][dato.col].push(dato));
-  });
-  lecturasPorCelda.forEach((fila,row)=>{
-    nombresCampos.forEach(col=>{
-      const lecturas=fila[col];
-      if(!lecturas.length)return;
-      const votos=new Map();
-      lecturas.forEach(lectura=>{
-        if(!votos.has(lectura.valor))votos.set(lectura.valor,[]);
-        votos.get(lectura.valor).push(lectura.confianza);
-      });
-      const candidatos=[...votos.entries()].sort((a,b)=>{
-        const calidadA=a[1].reduce((s,c)=>s+c,0),calidadB=b[1].reduce((s,c)=>s+c,0);
-        return calidadB-calidadA||b[1].length-a[1].length;
-      });
-      const [valor,confianzas]=candidatos[0];
-      const acuerdo=candidatos.length===1;
-      const confianza=acuerdo&&confianzas.length>1
-        ?Math.min(95,55+confianzas.reduce((s,c)=>s+c,0)/confianzas.length*0.35+(confianzas.length-2)*5)
-        :Math.min(54,Math.max(15,confianzas.reduce((s,c)=>s+c,0)/confianzas.length*0.5));
-      celdas[row][col]={valor,confianza};
-      indicesReconocidos.add(row);
-    });
-  });
-  const cantidad=celdas.reduce((total,row)=>total+Object.values(row).filter(Boolean).length,0);
-  if(!cantidad)throw new Error("No se detectaron números escritos en la tabla. Puedes introducirlos manualmente.");
-  return {celdas,cantidad,indicesReconocidos:[...indicesReconocidos]};
-}
-function crearVariantesOCR(canvas){
-  const ancho=canvas.width,alto=canvas.height,ctx=canvas.getContext("2d",{willReadFrequently:true});
-  if(!ctx)throw new Error("No se pudo preparar la foto para mejorar el reconocimiento.");
-  const original=ctx.getImageData(0,0,ancho,alto);
-  const total=ancho*alto,grises=new Uint8Array(total),integral=new Uint32Array((ancho+1)*(alto+1));
-  for(let i=0;i<total;i++){
-    const pixel=i*4;
-    grises[i]=Math.round((original.data[pixel]+original.data[pixel+1]+original.data[pixel+2])/3);
-  }
-  for(let y=1;y<=alto;y++){
-    let sumaFila=0;
-    for(let x=1;x<=ancho;x++){
-      sumaFila+=grises[(y-1)*ancho+x-1];
-      integral[y*(ancho+1)+x]=integral[(y-1)*(ancho+1)+x]+sumaFila;
-    }
-  }
-  const variantes=[];
-  for(const modo of ["grises","contraste","azul"]){
-    const imagen=document.createElement("canvas");
-    imagen.width=ancho;imagen.height=alto;
-    const salida=imagen.getContext("2d");
-    if(!salida)throw new Error("No se pudo preparar una versión mejorada de la foto.");
-    const datos=salida.createImageData(ancho,alto);
-    for(let y=0;y<alto;y++){
-      for(let x=0;x<ancho;x++){
-        const indice=y*ancho+x,pixel=indice*4;
-        let valor;
-        if(modo==="grises")valor=grises[indice];
-        else if(modo==="azul")valor=original.data[pixel+2]-original.data[pixel]>18&&original.data[pixel]<190?0:255;
-        else{
-          const x0=Math.max(0,x-7),x1=Math.min(ancho-1,x+7),y0=Math.max(0,y-7),y1=Math.min(alto-1,y+7);
-          const a=integral[y0*(ancho+1)+x0],b=integral[y0*(ancho+1)+x1+1];
-          const c=integral[(y1+1)*(ancho+1)+x0],d=integral[(y1+1)*(ancho+1)+x1+1];
-          const media=(d-b-c+a)/((x1-x0+1)*(y1-y0+1));
-          valor=grises[indice]<media-12?0:255;
-        }
-        datos.data[pixel]=datos.data[pixel+1]=datos.data[pixel+2]=valor;
-        datos.data[pixel+3]=255;
-      }
-    }
-    salida.putImageData(datos,0,0);
-    variantes.push(imagen);
-  }
-  return variantes;
-}
-function cargarScriptOCR(){
-  if(window.Tesseract)return Promise.resolve(window.Tesseract);
-  if(scriptOCRPromise)return scriptOCRPromise;
-  scriptOCRPromise=new Promise((resolve,reject)=>{
-    const script=document.createElement("script");
-    script.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
-    script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error("No se pudo iniciar el reconocimiento de texto."));
-    script.onerror=()=>{
-      scriptOCRPromise=null;
-      reject(new Error("No se pudo descargar el motor OCR. Comprueba la conexión e inténtalo de nuevo."));
-    };
-    document.head.appendChild(script);
-  });
-  return scriptOCRPromise;
-}
-async function imagenParaOCR(file){
+async function prepararImagenParaOpenAI(file){
   let bitmap;
   if(window.createImageBitmap)bitmap=await createImageBitmap(file);
   else{
@@ -852,82 +651,128 @@ async function imagenParaOCR(file){
   const canvas=document.createElement("canvas");
   canvas.width=Math.round(bitmap.width*escala);canvas.height=Math.round(bitmap.height*escala);
   const ctx=canvas.getContext("2d");
-  if(!ctx)throw new Error("No se pudo preparar la imagen para el reconocimiento.");
+  if(!ctx)throw new Error("No se pudo preparar la imagen para OpenAI.");
   ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
   if(bitmap.close)bitmap.close();
   return canvas;
 }
-async function leerFotoControl(){
+function aplicarResultadoFoto(analisis,lista){
+  const productosReconocidos=analisis.indicesReconocidos.map(index=>lista[index]);
+  const idsReconocidos=new Set(productosReconocidos.map(p=>String(p.id)));
+  const entradasReconocidas=Array.from(productosContainer.querySelectorAll('input[type="number"][data-producto]'))
+    .filter(input=>idsReconocidos.has(input.dataset.producto));
+  const hayValores=entradasReconocidas.some(input=>input.value!=="");
+  if(hayValores&&!confirm("Leer esta foto reemplazará los valores actuales de los productos reconocidos en ella. ¿Continuar?")){
+    mostrarEstadoFoto("Lectura cancelada. No se modificaron los valores del formulario.");
+    return false;
+  }
+  clearTimeout(autoSaveTimer);
+  entradasReconocidas.forEach(input=>{input.value="";input.classList.remove("photo-low-confidence");input.removeAttribute("title");});
+  analisis.indicesReconocidos.forEach(index=>{
+    const fila=analisis.celdas[index];
+    const producto=lista[index];
+    Object.entries(fila).forEach(([campo,dato])=>{
+      if(!dato)return;
+      const input=productosContainer.querySelector(`[data-producto="${producto.id}"][data-campo="${campo}"]`);
+      if(!input)return;
+      input.value=dato.valor;
+      if(dato.confianza<55){
+        input.classList.add("photo-low-confidence");
+        input.title=`Reconocimiento con confianza baja (${Math.round(dato.confianza)}%). Comprueba este valor.`;
+      }
+    });
+  });
+  establecerBorradorFoto(true);
+  fechaBorradorFoto=fechaInput.value;
+  usuarioBorradorFoto=usuarioInput.value;
+  actualizarProgreso();actualizarCalculos();estado("dirty");
+  const dudosos=Array.from(productosContainer.querySelectorAll(".photo-low-confidence")).length;
+  mostrarEstadoFoto(`Se detectaron ${analisis.cantidad} valores en ${productosReconocidos.length} producto(s) con OpenAI. Si la hoja tiene más páginas, carga cada foto por separado; los datos de las páginas anteriores se conservan. ${dudosos?`${dudosos} valores tienen confianza baja (marcados en amarillo). `:""}Revisa los datos y pulsa GUARDAR CONTROL.`,dudosos?"warning":"success");
+  return true;
+}
+function analizarResultadoOpenAI(resultado,productos){
+  if(!resultado||!Array.isArray(resultado.rows)||resultado.rows.length!==productos.length){
+    throw new Error("OpenAI no devolvió todas las filas. No se modificaron los campos.");
+  }
+  const campos={
+    initial:"inicial",
+    replenishment:"reposicion",
+    surplus:"sobrante",
+    waste:"merma"
+  };
+  const filas=productos.map(()=>Object.fromEntries(Object.values(campos).map(campo=>[campo,null])));
+  const indicesReconocidos=new Set();
+  let cantidad=0;
+  const vistos=new Set();
+  resultado.rows.forEach(fila=>{
+    const index=fila.product_index;
+    if(!Number.isInteger(index)||index<0||index>=productos.length||vistos.has(index)){
+      throw new Error("OpenAI devolvió una fila con índice inválido o repetido. No se modificaron los campos.");
+    }
+    vistos.add(index);
+    if(normalizarTexto(fila.product_name)!==normalizarTexto(productos[index].nombre)){
+      throw new Error(`El producto de la fila ${index+1} no coincide con la selección. No se modificaron los campos.`);
+    }
+    if(!Array.isArray(fila.uncertain_fields)||fila.uncertain_fields.some(campo=>!Object.hasOwn(campos,campo))){
+      throw new Error(`La fila ${index+1} contiene avisos de lectura inválidos. No se modificaron los campos.`);
+    }
+    Object.entries(campos).forEach(([campo,campoApp])=>{
+      const valor=fila[campo];
+      if(valor===null)return;
+      if(!Number.isInteger(valor)||valor<0||valor>9999){
+        throw new Error(`El valor de la fila ${index+1} no es un número entero válido. No se modificaron los campos.`);
+      }
+      const dudoso=fila.uncertain_fields.includes(campo);
+      filas[index][campoApp]={valor:String(valor),confianza:dudoso?40:80};
+      cantidad++;
+      indicesReconocidos.add(index);
+    });
+  });
+  if(vistos.size!==productos.length)throw new Error("OpenAI omitió alguna fila. No se modificaron los campos.");
+  if(!cantidad)throw new Error("OpenAI no encontró cantidades legibles en la hoja.");
+  return {celdas:filas,cantidad,indicesReconocidos:[...indicesReconocidos]};
+}
+async function leerFotoConOpenAI(){
   if(!fotoControlArchivo){mostrarEstadoFoto("Selecciona o toma primero una foto.","warning");return;}
   const lista=PRODUCTOS.filter(p=>productosSeleccionados.has(String(p.id)));
   if(!lista.length){mostrarEstadoFoto("Selecciona los productos de la hoja antes de leerla.","warning");return;}
-  const boton=document.getElementById("leerFotoBtn");
-  boton.disabled=true;boton.textContent="LEYENDO FOTO…";
+  const accessCode=openaiAccessCodeInput.value.trim();
+  if(!accessCode){mostrarEstadoFoto("Introduce el código de acceso configurado en Supabase.","warning");return;}
+  if(accessCode.length<32){mostrarEstadoFoto("El código de acceso debe tener al menos 32 caracteres.","warning");return;}
+  if(!confirm("Esta opción enviará la foto a OpenAI a través de Supabase. El uso de la API puede generar un coste. ¿Continuar?"))return;
+  const boton=document.getElementById("leerFotoOpenAIBtn");
+  boton.disabled=true;boton.textContent="ENVIANDO A OPENAI…";
   try{
-    mostrarEstadoFoto("Preparando la foto para reconocer la hoja…");
-    const canvas=await imagenParaOCR(fotoControlArchivo);
-    const Tesseract=await cargarScriptOCR();
-    if(!workerOCR){
-      workerOCR=await Tesseract.createWorker("spa",1,{
-        workerPath:"https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
-        langPath:"https://tessdata.projectnaptha.com/4.0.0",
-        logger:info=>{
-          if(info.status==="recognizing text")mostrarEstadoFoto(`Reconociendo texto: ${Math.round((info.progress||0)*100)}%`);
-          else if(info.status)mostrarEstadoFoto(`Preparando reconocimiento en este dispositivo: ${info.status}…`);
-        }
-      });
-      await workerOCR.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1"});
-    }
-    const resultado=await workerOCR.recognize(canvas);
-    mostrarEstadoFoto("Mejorando contraste y leyendo los números con varios filtros locales…");
-    const lecturasNumericas=[];
-    try{
-      await workerOCR.setParameters({tessedit_pageseg_mode:"11",tessedit_char_whitelist:"0123456789"});
-      for(const variante of crearVariantesOCR(canvas)){
-        const lectura=await workerOCR.recognize(variante);
-        lecturasNumericas.push(lectura.data.words||[]);
-      }
-    }finally{
-      await workerOCR.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1",tessedit_char_whitelist:""});
-    }
-    const analisis=analizarCeldasOCR(resultado.data.words||[],lista,lecturasNumericas);
-    const productosReconocidos=analisis.indicesReconocidos.map(index=>lista[index]);
-    const idsReconocidos=new Set(productosReconocidos.map(p=>String(p.id)));
-    const entradasReconocidas=Array.from(productosContainer.querySelectorAll('input[type="number"][data-producto]'))
-      .filter(input=>idsReconocidos.has(input.dataset.producto));
-    const hayValores=entradasReconocidas.some(input=>input.value!=="");
-    if(hayValores&&!confirm("Leer esta foto reemplazará los valores actuales de los productos reconocidos en ella. ¿Continuar?")){
-      mostrarEstadoFoto("Lectura cancelada. No se modificaron los valores del formulario.");
-      return;
-    }
-    clearTimeout(autoSaveTimer);
-    entradasReconocidas.forEach(input=>{input.value="";input.classList.remove("ocr-low-confidence");input.removeAttribute("title");});
-    analisis.indicesReconocidos.forEach(index=>{
-      const fila=analisis.celdas[index];
-      const producto=lista[index];
-      Object.entries(fila).forEach(([campo,dato])=>{
-        if(!dato)return;
-        const input=productosContainer.querySelector(`[data-producto="${producto.id}"][data-campo="${campo}"]`);
-        if(!input)return;
-        input.value=dato.valor;
-        if(dato.confianza<55){
-          input.classList.add("ocr-low-confidence");
-          input.title=`Reconocimiento con confianza baja (${Math.round(dato.confianza)}%). Comprueba este valor.`;
-        }
-      });
+    mostrarEstadoFoto("Preparando la foto para enviarla a OpenAI…");
+    const canvas=await prepararImagenParaOpenAI(fotoControlArchivo);
+    const imageDataUrl=canvas.toDataURL("image/jpeg",0.85);
+    if(imageDataUrl.length>7_000_000)throw new Error("La imagen procesada sigue siendo demasiado grande. Prueba con una foto de menor resolución.");
+    const respuesta=await fetch(OPENAI_READ_ENDPOINT,{
+      method:"POST",
+      headers:{
+        "apikey":SUPABASE_KEY,
+        "Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        accessCode,
+        imageDataUrl,
+        products:lista.map((producto,index)=>({index,name:producto.nombre}))
+      })
     });
-    establecerBorradorFoto(true);
-    fechaBorradorFoto=fechaInput.value;
-    usuarioBorradorFoto=usuarioInput.value;
-    actualizarProgreso();actualizarCalculos();estado("dirty");
-    const dudosos=Array.from(productosContainer.querySelectorAll(".ocr-low-confidence")).length;
-    mostrarEstadoFoto(`Se detectaron ${analisis.cantidad} valores en ${productosReconocidos.length} producto(s). Si la hoja tiene más páginas, carga cada foto por separado; los datos de las páginas anteriores se conservan. ${dudosos?`${dudosos} valores tienen confianza baja (marcados en amarillo). `:""}Revisa los datos y pulsa GUARDAR CONTROL.`,dudosos?"warning":"success");
+    const texto=await respuesta.text();
+    let resultado;
+    try{resultado=texto?JSON.parse(texto):{};}
+    catch{throw new Error(`La función de Supabase devolvió una respuesta no válida (HTTP ${respuesta.status}).`);}
+    if(!respuesta.ok)throw new Error(resultado.error||`Falló la lectura con OpenAI (HTTP ${respuesta.status}).`);
+    const analisis=analizarResultadoOpenAI(resultado,lista);
+    aplicarResultadoFoto(analisis,lista);
   }catch(e){
     console.error(e);
-    mostrarEstadoFoto("No se pudieron leer los datos: "+e.message,"warning");
+    mostrarEstadoFoto("No se pudieron leer los datos con OpenAI: "+e.message,"warning");
   }finally{
     boton.disabled=!fotoControlArchivo;
-    boton.textContent="LEER FOTO";
+    boton.textContent="LEER CON OPENAI";
   }
 }
 function confirmarCambioBorradorFoto(){
@@ -941,7 +786,7 @@ function quitarFotoControl(){
   const input=document.getElementById("fotoControl");
   input.value="";
   fotoControlArchivo=null;
-  document.getElementById("leerFotoBtn").disabled=true;
+  document.getElementById("leerFotoOpenAIBtn").disabled=true;
   document.getElementById("limpiarFotoBtn").disabled=true;
   const preview=document.getElementById("fotoControlPreview");
   preview.removeAttribute("src");preview.hidden=true;
@@ -991,16 +836,15 @@ document.addEventListener("input",(e)=>{
   }
 });
 tipoDiaInput.addEventListener("change",guardarTipoDia);
-document.getElementById("fotoControl").addEventListener("change",event=>{
+function cargarFotoSeleccionada(event){
   const archivo=event.target.files?.[0];
-  if(!archivo){quitarFotoControl();return;}
+  event.target.value="";
+  if(!archivo)return;
   if(!archivo.type.startsWith("image/")){
-    event.target.value="";
     mostrarEstadoFoto("Selecciona un archivo de imagen válido.","warning");
     return;
   }
   if(archivo.size>15*1024*1024){
-    event.target.value="";
     mostrarEstadoFoto("La foto supera 15 MB. Reduce su tamaño o toma una imagen con menor resolución.","warning");
     return;
   }
@@ -1009,11 +853,17 @@ document.getElementById("fotoControl").addEventListener("change",event=>{
   fotoControlUrl=URL.createObjectURL(archivo);
   const preview=document.getElementById("fotoControlPreview");
   preview.src=fotoControlUrl;preview.hidden=false;
-  document.getElementById("leerFotoBtn").disabled=false;
+  document.getElementById("leerFotoOpenAIBtn").disabled=false;
   document.getElementById("limpiarFotoBtn").disabled=false;
   mostrarEstadoFoto("Foto lista. Procura que se vea la hoja completa, de frente y con buena luz.");
+}
+document.getElementById("fotoControl").addEventListener("change",cargarFotoSeleccionada);
+document.getElementById("abrirCamaraBtn").addEventListener("click",()=>document.getElementById("fotoControl").click());
+openaiAccessCodeInput.addEventListener("input",()=>{
+  if(openaiAccessCodeInput.value)sessionStorage.setItem(OPENAI_ACCESS_CODE_SESSION_KEY,openaiAccessCodeInput.value);
+  else sessionStorage.removeItem(OPENAI_ACCESS_CODE_SESSION_KEY);
 });
-document.getElementById("leerFotoBtn").addEventListener("click",leerFotoControl);
+document.getElementById("leerFotoOpenAIBtn").addEventListener("click",leerFotoConOpenAI);
 document.getElementById("limpiarFotoBtn").addEventListener("click",quitarFotoControl);
 
 function obtenerRegistros(){
@@ -1082,33 +932,22 @@ function generarExcel(){
   if(!window.ExcelJS){mostrarMensaje("No se pudo cargar la herramienta para generar Excel. Comprueba tu conexión e inténtalo de nuevo.","warning");return;}
   try{
     const libro=new ExcelJS.Workbook();
-    const anchoPaginaCm=21-1.5*2;
-    const anchoMaximoPuntos=anchoPaginaCm/2.54*72;
-    const anchoProducto=34,anchoCategoria=18,anchoNumero=12;
-    const anchoColumnaPuntos=ancho=>((ancho*7+5)*72)/96;
-    const incluirCategoria=anchoColumnaPuntos(anchoProducto)+anchoColumnaPuntos(anchoCategoria)+4*anchoColumnaPuntos(anchoNumero)<=anchoMaximoPuntos;
-    const columnas=incluirCategoria
-      ?[{width:anchoProducto},{width:anchoCategoria},...Array.from({length:4},()=>({width:anchoNumero}))]
-      :[{width:anchoProducto},...Array.from({length:4},()=>({width:anchoNumero}))];
-    const ultimaColumna=incluirCategoria?"F":"E";
+    const anchoProducto=30,anchoCategoria=((3.5*96/2.54)-5)/7,anchoNumero=((2.3*96/2.54)-5)/7;
+    const columnas=[
+      {width:anchoCategoria},
+      {width:anchoProducto},
+      ...Array.from({length:4},()=>({width:anchoNumero}))
+    ];
+    const ultimaColumna="F";
     const hoja=libro.addWorksheet("Control diario",{
       pageSetup:{paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:1,printArea:`A1:${ultimaColumna}${lista.length+1}`,margins:{left:1.5/2.54,right:1.5/2.54,top:1.5/2.54,bottom:1.5/2.54,header:0,footer:0}}
     });
     hoja.columns=columnas;
-    const encabezados=incluirCategoria
-      ?["PRODUCTOS","CATEGORÍA","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"]
-      :["PRODUCTOS","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
+    const encabezados=["CAT","PRODUCTOS","INICIAL","REPOSICIÓN","SOBRANTE","MERMA"];
     const bordeTabla={style:"thin",color:{argb:"FFB7B7B7"}};
     const estiloBordes={top:bordeTabla,left:bordeTabla,bottom:bordeTabla,right:bordeTabla};
     const filas=lista.map(p=>{
-      const obtenerCampo=campo=>{
-        const input=document.querySelector(`[data-producto="${p.id}"][data-campo="${campo}"]`);
-        return input&&input.value!==""?Number(input.value):"";
-      };
-      const valores=[p.nombre];
-      if(incluirCategoria)valores.push(categoriaProducto(p));
-      valores.push(obtenerCampo("inicial"),obtenerCampo("reposicion"),obtenerCampo("sobrante"),obtenerCampo("merma"));
-      return valores;
+      return [categoriaProducto(p),p.nombre,"","","",""];
     });
     const filaEncabezados=hoja.addRow(encabezados);
     filaEncabezados.height=22;
@@ -1123,7 +962,8 @@ function generarExcel(){
       fila.height=20;
       fila.eachCell((cell,columna)=>{
         cell.font={name:"Arial",size:11};
-        cell.alignment={horizontal:columna===1?"left":"center",vertical:"middle"};
+        cell.alignment={horizontal:columna===2?"left":"center",vertical:"middle"};
+        if(columna<=2)cell.alignment.shrinkToFit=true;
         cell.border=estiloBordes;
       });
     });
